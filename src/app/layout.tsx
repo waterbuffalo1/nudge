@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Montserrat } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -12,9 +12,14 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const montserrat = Montserrat({
+  variable: "--font-montserrat",
+  subsets: ["latin"],
+});
+
 export const metadata: Metadata = {
-  title: "Nudge",
-  description: "A new project",
+  title: "nudge...",
+  description: "Gentle nudges toward what you want to be.",
 };
 
 export default function RootLayout({
@@ -25,9 +30,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${montserrat.variable} min-h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="relative min-h-full flex flex-col">{children}</body>
     </html>
   );
 }

@@ -1,26 +1,85 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #e4e0d9;
+  --background-elevated: #f3f0ea;
+  --background-fade: #c8c0b4;
+  --background-fade-half: color-mix(in srgb, var(--background-fade) 50%, var(--background));
+  --overlay-fade-half: color-mix(in srgb, var(--background-fade) 50%, transparent);
+  --foreground: #403b35;
+  --foreground-muted: #6f6860;
+  --foreground-done: #9a9288;
+  --border: #a39b91;
+  --vignette-x: 50%;
+  --vignette-y: 32%;
+  --vignette-clear: 26%;
+  --scroll-target-y: 20dvh;
+  --scroll-activity-height: 5.75rem;
+  --scroll-bottom-pad: calc(
+    100dvh - var(--scroll-target-y) - var(--scroll-activity-height)
+  );
+  --add-bar-reserve: 5.5rem;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-elevated: var(--background-elevated);
   --color-foreground: var(--foreground);
+  --color-muted: var(--foreground-muted);
+  --color-done: var(--foreground-done);
+  --color-border: var(--border);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-category: var(--font-montserrat);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  min-height: 100%;
+  background-color: var(--background);
 }
 
 body {
-  background: var(--background);
+  min-height: 100dvh;
+  background: transparent;
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+.scroll-pad-bottom-spacer {
+  height: var(--scroll-bottom-pad);
+  flex-shrink: 0;
+}
+
+.category-page-main {
+  padding-bottom: calc(
+    var(--add-bar-reserve) + max(1rem, env(safe-area-inset-bottom))
+  );
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: radial-gradient(
+    ellipse 220% 65% at var(--vignette-x) var(--vignette-y),
+    var(--background) 0%,
+    var(--background) var(--vignette-clear),
+    var(--background-fade-half) 100%
+  );
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background-image: radial-gradient(
+    ellipse 220% 65% at var(--vignette-x) var(--vignette-y),
+    transparent 0%,
+    transparent var(--vignette-clear),
+    var(--overlay-fade-half) 100%
+  );
 }

@@ -1,0 +1,39 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { CategoryActivities } from "@/components/CategoryActivities";
+import { getActivitiesForCategory } from "@/lib/activities";
+import { getCategoryBySlug } from "@/lib/categories";
+
+type CategoryPageProps = {
+  params: Promise<{ slug: string }>;
+};
+
+export default async function CategoryPage({ params }: CategoryPageProps) {
+  const { slug } = await params;
+  const category = getCategoryBySlug(slug);
+
+  if (!category) {
+    notFound();
+  }
+
+  const activities = getActivitiesForCategory(slug);
+
+  return (
+    <main className="category-page-main mx-auto flex min-h-full w-full max-w-md flex-col px-5 py-8">
+      <Link
+        href="/"
+        className="mb-8 text-sm font-medium text-muted active:text-foreground"
+      >
+        ← back
+      </Link>
+      <h1 className="mb-8 text-xl font-semibold text-foreground">
+        {category.emoji} {category.name}
+      </h1>
+      <CategoryActivities
+        categorySlug={slug}
+        builtInActivities={activities}
+      />
+      <div className="scroll-pad-bottom-spacer" aria-hidden />
+    </main>
+  );
+}
