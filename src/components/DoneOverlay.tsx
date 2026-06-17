@@ -252,7 +252,7 @@ export function DoneOverlay({
           <span className="font-category text-3xl font-medium text-foreground">
             {title}
           </span>
-          <span className="font-category text-lg font-medium text-muted">
+          <span className="max-w-[min(100%,20rem)] font-category text-lg font-medium text-balance text-muted">
             {message}
           </span>
         </div>

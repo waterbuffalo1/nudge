@@ -85,6 +85,54 @@ export function ActivityCard({
   };
 
   const doneCopy = getDoneCopy(activity);
+  const nameRef = useRef<HTMLSpanElement>(null);
+  const doneRef = useRef<HTMLSpanElement>(null);
+  const [wrapDoneMessage, setWrapDoneMessage] = useState(false);
+
+  useEffect(() => {
+    if (!isDone) {
+      setWrapDoneMessage(false);
+      return;
+    }
+
+    const measureOverlap = () => {
+      const nameEl = nameRef.current;
+      const doneEl = doneRef.current;
+      if (!nameEl || !doneEl) return;
+
+      const nameRect = nameEl.getBoundingClientRect();
+      const doneRect = doneEl.getBoundingClientRect();
+
+      if (nameRect.right > doneRect.left - 4) {
+        setWrapDoneMessage(true);
+        return;
+      }
+
+      if (nameRect.right < doneRect.left - 12) {
+        setWrapDoneMessage(false);
+      }
+    };
+
+    const scheduleMeasure = () => {
+      requestAnimationFrame(measureOverlap);
+    };
+
+    scheduleMeasure();
+
+    const observer = new ResizeObserver(scheduleMeasure);
+    const button = nameRef.current?.closest("button");
+
+    if (nameRef.current) observer.observe(nameRef.current);
+    if (doneRef.current) observer.observe(doneRef.current);
+    if (button) observer.observe(button);
+
+    window.addEventListener("resize", scheduleMeasure);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", scheduleMeasure);
+    };
+  }, [isDone, activity.name, doneCopy.message]);
 
   const handleTap = () => {
     if (isDone || isAnimating || didLongPressRef.current) {
@@ -111,17 +159,18 @@ export function ActivityCard({
         onContextMenu={(event) => {
           if (isDone) event.preventDefault();
         }}
-        className="flex w-full touch-manipulation items-center justify-start gap-3 rounded-[2.75rem] border-2 border-border bg-elevated px-6 py-5 text-left active:scale-[0.98] transition-transform select-none"
+        className="relative flex w-full touch-manipulation items-center justify-start gap-3 rounded-[2.75rem] border-2 border-border bg-elevated px-6 py-5 text-left active:scale-[0.98] transition-transform select-none"
       >
         {activity.emoji ? (
-          <span className="text-3xl leading-none" aria-hidden>
+          <span className="shrink-0 text-3xl leading-none" aria-hidden>
             {activity.emoji}
           </span>
         ) : (
           <span className="w-8 shrink-0" aria-hidden />
         )}
         <span
-          className={`min-w-0 flex-1 font-category text-2xl font-medium leading-tight ${
+          ref={nameRef}
+          className={`min-w-0 flex-1 font-category text-2xl font-medium leading-tight whitespace-nowrap ${
             isDone
               ? "text-done line-through decoration-done decoration-2"
               : "text-foreground"
@@ -129,15 +178,23 @@ export function ActivityCard({
         >
           {activity.name}
         </span>
-        <span
-          className={`ml-2 shrink-0 text-right font-category text-xs leading-snug ${
-            isDone ? "" : "invisible"
-          }`}
-          aria-hidden={!isDone}
-        >
-          <span className="block font-medium text-foreground">{doneCopy.title}</span>
-          <span className="block whitespace-nowrap text-muted">{doneCopy.message}</span>
-        </span>
+        {isDone ? (
+          <span
+            ref={doneRef}
+            className="pointer-events-none absolute top-1/2 right-6 flex max-w-[42%] min-w-0 -translate-y-1/2 flex-col items-end gap-0.5 text-right font-category text-xs leading-snug"
+          >
+            <span className="whitespace-nowrap font-medium text-foreground">
+              {doneCopy.title}
+            </span>
+            <span
+              className={`min-w-0 text-muted ${
+                wrapDoneMessage ? "line-clamp-2" : "whitespace-nowrap"
+              }`}
+            >
+              {doneCopy.message}
+            </span>
+          </span>
+        ) : null}
       </button>
       {showOverlay && (
         <DoneOverlay

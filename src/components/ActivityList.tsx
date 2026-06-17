@@ -3,6 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Activity } from "@/lib/activities";
 import { ActivityCard } from "@/components/ActivityCard";
+import {
+  DAYTIME_EXERCISE_CATEGORY,
+  DAYTIME_EXERCISE_SLUG,
+  EXERCISE_CATEGORY,
+  isDaytimeExerciseDone,
+} from "@/lib/daytime-exercise";
 
 type ActivityListProps = {
   categorySlug: string;
@@ -13,32 +19,87 @@ function getClientTimeZone() {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
+function isActivityDone(
+  activitySlug: string,
+  completedSlugs: Set<string>,
+  exerciseCompletedSlugs: Set<string>,
+) {
+  if (activitySlug === DAYTIME_EXERCISE_SLUG) {
+    return isDaytimeExerciseDone({
+      betterSleepCompleted: completedSlugs,
+      exerciseCompleted: exerciseCompletedSlugs,
+    });
+  }
+
+  return completedSlugs.has(activitySlug);
+}
+
 export function ActivityList({ categorySlug, activities }: ActivityListProps) {
   const [completedSlugs, setCompletedSlugs] = useState<Set<string>>(
     () => new Set(),
   );
+  const [exerciseCompletedSlugs, setExerciseCompletedSlugs] = useState<
+    Set<string>
+  >(() => new Set());
   const [loaded, setLoaded] = useState(false);
 
   const timeZone = getClientTimeZone();
+  const needsExerciseCompletions = categorySlug === DAYTIME_EXERCISE_CATEGORY;
 
   useEffect(() => {
-    const params = new URLSearchParams({
-      category: categorySlug,
-      timezone: timeZone,
-    });
+    let cancelled = false;
 
-    fetch(`/api/completions?${params.toString()}`)
-      .then((response) => response.json())
-      .then((data: { completed?: string[] }) => {
-        setCompletedSlugs(new Set(data.completed ?? []));
-      })
-      .catch((error) => {
-        console.error("Failed to load completions", error);
-      })
-      .finally(() => {
-        setLoaded(true);
+    const loadCompletions = async () => {
+      const params = new URLSearchParams({
+        category: categorySlug,
+        timezone: timeZone,
       });
-  }, [categorySlug, timeZone]);
+
+      try {
+        const requests = [
+          fetch(`/api/completions?${params.toString()}`).then((response) =>
+            response.json(),
+          ),
+        ];
+
+        if (needsExerciseCompletions) {
+          const exerciseParams = new URLSearchParams({
+            category: EXERCISE_CATEGORY,
+            timezone: timeZone,
+          });
+          requests.push(
+            fetch(`/api/completions?${exerciseParams.toString()}`).then(
+              (response) => response.json(),
+            ),
+          );
+        }
+
+        const [categoryData, exerciseData] = await Promise.all(requests);
+
+        if (cancelled) return;
+
+        setCompletedSlugs(new Set(categoryData.completed ?? []));
+        setExerciseCompletedSlugs(
+          needsExerciseCompletions
+            ? new Set(exerciseData?.completed ?? [])
+            : new Set(categoryData.completed ?? []),
+        );
+      } catch (error) {
+        console.error("Failed to load completions", error);
+      } finally {
+        if (!cancelled) {
+          setLoaded(true);
+        }
+      }
+    };
+
+    setLoaded(false);
+    void loadCompletions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [categorySlug, needsExerciseCompletions, timeZone]);
 
   const handleComplete = useCallback(
     async (activitySlug: string) => {
@@ -92,7 +153,14 @@ export function ActivityList({ categorySlug, activities }: ActivityListProps) {
         <ActivityCard
           key={activity.slug}
           activity={activity}
-          isDone={loaded && completedSlugs.has(activity.slug)}
+          isDone={
+            loaded &&
+            isActivityDone(
+              activity.slug,
+              completedSlugs,
+              exerciseCompletedSlugs,
+            )
+          }
           onComplete={() => handleComplete(activity.slug)}
           onUndo={() => handleUndo(activity.slug)}
         />
