@@ -40,6 +40,7 @@ async function migrate() {
       emoji TEXT NOT NULL DEFAULT '',
       done_message TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      nudge_date TEXT,
       PRIMARY KEY (device_id, category_slug, slug)
     )
   `);
@@ -59,6 +60,18 @@ async function migrate() {
   await db.execute(`
     CREATE INDEX IF NOT EXISTS idx_activity_submissions_status
     ON activity_submissions(status)
+  `);
+
+  try {
+    await db.execute(`
+      ALTER TABLE custom_activities ADD COLUMN nudge_date TEXT
+    `);
+  } catch {
+    // Column already exists.
+  }
+
+  await db.execute(`
+    DELETE FROM custom_activities WHERE nudge_date IS NULL
   `);
 }
 

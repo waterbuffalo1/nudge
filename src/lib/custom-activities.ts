@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import type { Activity } from "@/lib/activities";
 import { ensureSchema, getDb } from "@/lib/db";
+import { getNudgeDate } from "@/lib/nudge-date";
 
 export const ACTIVITY_NAME_MAX = 20;
 export const DONE_MESSAGE_MAX = 40;
@@ -66,44 +67,105 @@ function rowToActivity(row: Record<string, unknown>): Activity {
   };
 }
 
+export async function purgeExpiredCustomActivities({
+  deviceId,
+  timeZone,
+}: {
+  deviceId: string;
+  timeZone: string;
+}): Promise<void> {
+  await ensureSchema();
+
+  const nudgeDate = getNudgeDate(new Date(), timeZone);
+  await getDb().execute({
+    sql: `
+      DELETE FROM custom_activities
+      WHERE device_id = ? AND nudge_date < ?
+    `,
+    args: [deviceId, nudgeDate],
+  });
+}
+
 export async function getCustomActivities({
   deviceId,
   categorySlug,
+  timeZone,
 }: {
   deviceId: string;
   categorySlug: string;
+  timeZone: string;
 }): Promise<Activity[]> {
   await ensureSchema();
 
+  await purgeExpiredCustomActivities({ deviceId, timeZone });
+
+  const nudgeDate = getNudgeDate(new Date(), timeZone);
   const result = await getDb().execute({
     sql: `
       SELECT slug, name, emoji, done_message
       FROM custom_activities
-      WHERE device_id = ? AND category_slug = ?
+      WHERE device_id = ? AND category_slug = ? AND nudge_date = ?
       ORDER BY created_at ASC
     `,
-    args: [deviceId, categorySlug],
+    args: [deviceId, categorySlug, nudgeDate],
   });
 
   return result.rows.map((row) => rowToActivity(row as Record<string, unknown>));
+}
+
+export async function getAllCustomActivitiesForDevice({
+  deviceId,
+  timeZone,
+}: {
+  deviceId: string;
+  timeZone: string;
+}): Promise<Map<string, Activity[]>> {
+  await ensureSchema();
+
+  await purgeExpiredCustomActivities({ deviceId, timeZone });
+
+  const nudgeDate = getNudgeDate(new Date(), timeZone);
+  const result = await getDb().execute({
+    sql: `
+      SELECT category_slug, slug, name, emoji, done_message
+      FROM custom_activities
+      WHERE device_id = ? AND nudge_date = ?
+      ORDER BY created_at ASC
+    `,
+    args: [deviceId, nudgeDate],
+  });
+
+  const customByCategory = new Map<string, Activity[]>();
+
+  for (const row of result.rows) {
+    const categorySlug = String(row.category_slug);
+    const activities = customByCategory.get(categorySlug) ?? [];
+    activities.push(rowToActivity(row as Record<string, unknown>));
+    customByCategory.set(categorySlug, activities);
+  }
+
+  return customByCategory;
 }
 
 export async function createCustomActivity({
   deviceId,
   categorySlug,
   input,
+  timeZone,
 }: {
   deviceId: string;
   categorySlug: string;
   input: ValidatedCustomActivity;
+  timeZone: string;
 }): Promise<Activity> {
   await ensureSchema();
 
+  const nudgeDate = getNudgeDate(new Date(), timeZone);
   const slug = `custom-${randomUUID()}`;
   await getDb().execute({
     sql: `
-      INSERT INTO custom_activities (device_id, category_slug, slug, name, emoji, done_message)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO custom_activities (device_id, category_slug, slug, name, emoji, done_message, nudge_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       deviceId,
@@ -112,6 +174,7 @@ export async function createCustomActivity({
       input.name,
       input.emoji,
       input.doneMessage ?? null,
+      nudgeDate,
     ],
   });
 

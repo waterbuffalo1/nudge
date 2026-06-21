@@ -5,6 +5,7 @@ export type Category = {
 };
 
 export const categories: Category[] = [
+  { slug: "eat", name: "eat", emoji: "🍽️" },
   { slug: "better-sleep", name: "better sleep", emoji: "😴" },
   { slug: "exercise", name: "exercise", emoji: "💪🏻" },
   { slug: "relationships", name: "relationships", emoji: "🤝🏻" },

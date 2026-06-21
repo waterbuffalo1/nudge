@@ -25,6 +25,37 @@ export async function getCompletedActivitySlugs({
   return result.rows.map((row) => String(row.activity_slug));
 }
 
+export async function getAllCompletedSlugsByCategory({
+  deviceId,
+  timeZone,
+}: {
+  deviceId: string;
+  timeZone: string;
+}): Promise<Map<string, Set<string>>> {
+  await ensureSchema();
+
+  const nudgeDate = getNudgeDate(new Date(), timeZone);
+  const result = await getDb().execute({
+    sql: `
+      SELECT category_slug, activity_slug
+      FROM completions
+      WHERE device_id = ? AND nudge_date = ?
+    `,
+    args: [deviceId, nudgeDate],
+  });
+
+  const completedByCategory = new Map<string, Set<string>>();
+
+  for (const row of result.rows) {
+    const categorySlug = String(row.category_slug);
+    const slugs = completedByCategory.get(categorySlug) ?? new Set<string>();
+    slugs.add(String(row.activity_slug));
+    completedByCategory.set(categorySlug, slugs);
+  }
+
+  return completedByCategory;
+}
+
 export async function markActivityComplete({
   deviceId,
   categorySlug,

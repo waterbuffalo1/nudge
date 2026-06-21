@@ -6,8 +6,25 @@ import {
   validateCustomActivityInput,
 } from "@/lib/custom-activities";
 import { createDeviceId, DEVICE_ID_COOKIE, getDeviceId } from "@/lib/device-id";
+import { getNudgeDate } from "@/lib/nudge-date";
 
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365 * 2;
+
+function isValidTimeZone(timeZone: string): boolean {
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolveTimeZone(value: string | null): string {
+  if (value && isValidTimeZone(value)) {
+    return value;
+  }
+  return "UTC";
+}
 
 function withDeviceCookie(response: NextResponse, deviceId: string) {
   response.cookies.set(DEVICE_ID_COOKIE, deviceId, {
@@ -32,6 +49,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const categorySlug = searchParams.get("category");
+    const timeZone = resolveTimeZone(searchParams.get("timezone"));
 
     if (!categorySlug) {
       return NextResponse.json(
@@ -43,9 +61,12 @@ export async function GET(request: Request) {
     const { deviceId, isNew } = await resolveDeviceId();
     const activities = isNew
       ? []
-      : await getCustomActivities({ deviceId, categorySlug });
+      : await getCustomActivities({ deviceId, categorySlug, timeZone });
 
-    const response = NextResponse.json({ activities });
+    const response = NextResponse.json({
+      activities,
+      nudgeDate: getNudgeDate(new Date(), timeZone),
+    });
 
     if (isNew) {
       withDeviceCookie(response, deviceId);
@@ -69,9 +90,11 @@ export async function POST(request: Request) {
       emoji?: string;
       doneMessage?: string;
       sendToMakers?: boolean;
+      timezone?: string;
     };
 
     const categorySlug = body.categorySlug;
+    const timeZone = resolveTimeZone(body.timezone ?? null);
     if (!categorySlug) {
       return NextResponse.json(
         { error: "categorySlug is required" },
@@ -94,6 +117,7 @@ export async function POST(request: Request) {
       deviceId,
       categorySlug,
       input: validation.data,
+      timeZone,
     });
 
     if (body.sendToMakers) {
@@ -107,7 +131,10 @@ export async function POST(request: Request) {
       });
     }
 
-    const response = NextResponse.json({ activity });
+    const response = NextResponse.json({
+      activity,
+      nudgeDate: getNudgeDate(new Date(), timeZone),
+    });
 
     if (isNew) {
       withDeviceCookie(response, deviceId);

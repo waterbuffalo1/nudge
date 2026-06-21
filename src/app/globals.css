@@ -74,7 +74,7 @@ body::after {
   content: "";
   position: fixed;
   inset: 0;
-  z-index: 1;
+  z-index: -1;
   pointer-events: none;
   background-image: radial-gradient(
     ellipse 220% 65% at var(--vignette-x) var(--vignette-y),

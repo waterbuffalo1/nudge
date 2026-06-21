@@ -1,5 +1,4 @@
-import { CategoryCard } from "@/components/CategoryCard";
-import { categories } from "@/lib/categories";
+import { CategoryGrid } from "@/components/CategoryGrid";
 
 export default function Home() {
   return (
@@ -7,11 +6,7 @@ export default function Home() {
       <h1 className="mb-8 text-2xl font-semibold tracking-tight text-foreground">
         nudge...
       </h1>
-      <div className="grid grid-cols-2 gap-3">
-        {categories.map((category) => (
-          <CategoryCard key={category.slug} category={category} />
-        ))}
-      </div>
+      <CategoryGrid />
       <div className="scroll-pad-bottom-spacer" aria-hidden />
     </main>
   );

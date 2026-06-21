@@ -19,7 +19,11 @@ export function CategoryActivities({
   const [sheetOpen, setSheetOpen] = useState(false);
 
   useEffect(() => {
-    const params = new URLSearchParams({ category: categorySlug });
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const params = new URLSearchParams({
+      category: categorySlug,
+      timezone: timeZone,
+    });
 
     fetch(`/api/activities?${params.toString()}`)
       .then((response) => response.json())
@@ -38,6 +42,7 @@ export function CategoryActivities({
 
   const handleAddActivity = useCallback(
     async (input: CustomActivityInput) => {
+      const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const response = await fetch("/api/activities", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -47,6 +52,7 @@ export function CategoryActivities({
           emoji: input.emoji,
           doneMessage: input.doneMessage,
           sendToMakers: input.sendToMakers,
+          timezone: timeZone,
         }),
       });
 
