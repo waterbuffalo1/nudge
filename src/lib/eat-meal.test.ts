@@ -6,10 +6,10 @@ import {
   formatRelativeTime,
   formatRelativeTimeRange,
   formatTimeRange,
-  getActiveMealCardStatus,
   getAutophagyStatusText,
   getCurrentMealStatusRow,
   getDigestionStatusText,
+  getEatHomeCardLines,
   getEatingFromStorageStatusText,
   getMealPhase,
   getMealStatusRows,
@@ -157,7 +157,7 @@ describe("eat meal windows", () => {
     );
   });
 
-  it("returns the active meal status for the home eat card", () => {
+  it("returns home card lines during supported eat phases only", () => {
     const selectedAt = roundToNearest15Minutes(
       new Date("2026-06-17T18:07:00-04:00"),
     );
@@ -165,7 +165,10 @@ describe("eat meal windows", () => {
       mealSize: "reasonable meal" as const,
       selectedAt: selectedAt.toISOString(),
     };
-    const duringEatingFromStorage = new Date("2026-06-17T23:00:00-04:00");
+    const duringPancreasRampDown = new Date("2026-06-17T21:00:00-04:00");
+    const duringLiver = new Date("2026-06-17T23:00:00-04:00");
+    const duringAutophagy = new Date("2026-06-18T10:00:00-04:00");
+    const duringDigestion = new Date("2026-06-17T18:30:00-04:00");
 
     const originalWindow = globalThis.window;
     const storage = new Map<string, string>([
@@ -188,11 +191,41 @@ describe("eat meal windows", () => {
     });
 
     try {
-      const status = getActiveMealCardStatus(duringEatingFromStorage);
-      expect(status).toEqual({
-        icon: "🍯",
-        label: "snacking on liver glycogen (nom nom nom)...",
-      });
+      expect(getEatHomeCardLines(duringDigestion)).toEqual([
+        { leadingIcon: "⚙️", text: "digesting..." },
+        {
+          leadingIcon: "🚶🏻‍♀️",
+          text: "good time to go for a walk!",
+          italic: true,
+        },
+      ]);
+      expect(getEatHomeCardLines(duringPancreasRampDown)).toEqual([
+        { leadingIcon: "🫁", text: "insulin dropping..." },
+        {
+          leadingIcon: "🧘",
+          text: "time to relax or stretch",
+          italic: true,
+        },
+      ]);
+      expect(getEatHomeCardLines(duringLiver)).toEqual([
+        { leadingIcon: "🍯", text: "snacking on liver..." },
+        {
+          leadingIcon: "🏋🏻‍♀️",
+          text: "good time for calisthenics!",
+          italic: true,
+        },
+      ]);
+      expect(getEatHomeCardLines(duringAutophagy)).toEqual([
+        { leadingIcon: "🧹", text: "cleaning up ◡̈" },
+        {
+          leadingIcon: "🏃🏻‍♀️",
+          text: "great time to run!",
+          italic: true,
+        },
+      ]);
+      expect(
+        getEatHomeCardLines(new Date("2026-06-19T08:00:00-04:00")),
+      ).toBeNull();
     } finally {
       if (originalWindow) {
         Object.defineProperty(globalThis, "window", {

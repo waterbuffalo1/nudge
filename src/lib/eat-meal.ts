@@ -493,37 +493,53 @@ export function getCurrentMealStatusRow(
   return rows[index] ?? rows[0]!;
 }
 
-export type MealCardStatus = {
-  icon: string;
-  label: string;
+export type EatHomeCardLine = {
+  leadingIcon?: string;
+  text: string;
+  italic?: boolean;
 };
 
-function getPhaseCardLabel(phase: MealPhase): string {
-  switch (phase) {
-    case "digestion":
-      return "body is processing food...";
-    case "pancreas-ramp-down":
-      return "pancreas is ramping down and we will approach our blood sugar baseline...";
-    case "eating-from-storage":
-      return "snacking on liver glycogen (nom nom nom)...";
-    case "autophagy":
-      return "autophagy. cleaning crew is working! 🧹...";
-  }
+function eatPhaseLine(
+  leadingIcon: string,
+  text: string,
+): EatHomeCardLine {
+  return { leadingIcon, text };
 }
 
-export function getActiveMealCardStatus(now: Date): MealCardStatus | null {
+function eatActivityNudge(
+  leadingIcon: string,
+  text: string,
+): EatHomeCardLine {
+  return { leadingIcon, text, italic: true };
+}
+
+const EAT_HOME_LINES_BY_PHASE: Record<MealPhase, EatHomeCardLine[]> = {
+  digestion: [
+    eatPhaseLine("⚙️", "digesting..."),
+    eatActivityNudge("🚶🏻‍♀️", "good time to go for a walk!"),
+  ],
+  "pancreas-ramp-down": [
+    eatPhaseLine("🫁", "insulin dropping..."),
+    eatActivityNudge("🧘", "time to relax or stretch"),
+  ],
+  "eating-from-storage": [
+    eatPhaseLine("🍯", "snacking on liver..."),
+    eatActivityNudge("🏋🏻‍♀️", "good time for calisthenics!"),
+  ],
+  autophagy: [
+    eatPhaseLine("🧹", "cleaning up ◡̈"),
+    eatActivityNudge("🏃🏻‍♀️", "great time to run!"),
+  ],
+};
+
+export function getEatHomeCardLines(now: Date): EatHomeCardLine[] | null {
   const lastMeal = readLastMeal();
   if (!lastMeal || !isMealActive(lastMeal, now)) {
     return null;
   }
 
   const windows = getMealWindows(new Date(lastMeal.selectedAt), lastMeal.mealSize);
-  const currentRow = getCurrentMealStatusRow(windows, now);
-
-  return {
-    icon: currentRow.icon,
-    label: getPhaseCardLabel(getMealPhase(windows, now)),
-  };
+  return EAT_HOME_LINES_BY_PHASE[getMealPhase(windows, now)];
 }
 
 export function isMealActive(lastMeal: LastMeal, now: Date): boolean {

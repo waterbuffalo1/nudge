@@ -6,7 +6,7 @@ import { getActivitiesForCategory } from "@/lib/activities";
 import { categories, EAT_CATEGORY_SLUG } from "@/lib/categories";
 import type { CategoryProgress } from "@/lib/category-progress";
 import { getClientTimeZone } from "@/lib/client-timezone";
-import { getActiveMealCardStatus, type MealCardStatus } from "@/lib/eat-meal";
+import { getEatHomeCardLines, type EatHomeCardLine } from "@/lib/eat-meal";
 
 function getBuiltInProgress(): Record<string, CategoryProgress> {
   return Object.fromEntries(
@@ -24,10 +24,12 @@ export function CategoryGrid() {
   const [progressByCategory, setProgressByCategory] = useState<
     Record<string, CategoryProgress>
   >(getBuiltInProgress);
-  const [eatStatus, setEatStatus] = useState<MealCardStatus | null>(null);
+  const [eatHomeLines, setEatHomeLines] = useState<EatHomeCardLine[] | null>(
+    null,
+  );
 
-  const refreshEatStatus = useCallback(() => {
-    setEatStatus(getActiveMealCardStatus(new Date()));
+  const refreshEatHomeLines = useCallback(() => {
+    setEatHomeLines(getEatHomeCardLines(new Date()));
   }, []);
 
   const loadProgress = useCallback(async () => {
@@ -46,13 +48,13 @@ export function CategoryGrid() {
   }, []);
 
   useEffect(() => {
-    refreshEatStatus();
+    refreshEatHomeLines();
     void loadProgress();
 
-    const intervalId = window.setInterval(refreshEatStatus, 60_000);
+    const intervalId = window.setInterval(refreshEatHomeLines, 60_000);
 
     const handleFocus = () => {
-      refreshEatStatus();
+      refreshEatHomeLines();
       void loadProgress();
     };
 
@@ -61,7 +63,7 @@ export function CategoryGrid() {
       window.clearInterval(intervalId);
       window.removeEventListener("focus", handleFocus);
     };
-  }, [loadProgress, refreshEatStatus]);
+  }, [loadProgress, refreshEatHomeLines]);
 
   const displayProgress = useMemo(() => {
     const builtIn = getBuiltInProgress();
@@ -81,8 +83,10 @@ export function CategoryGrid() {
           key={category.slug}
           category={category}
           progress={displayProgress[category.slug]}
-          eatStatus={
-            category.slug === EAT_CATEGORY_SLUG ? eatStatus ?? undefined : undefined
+          eatHomeLines={
+            category.slug === EAT_CATEGORY_SLUG
+              ? eatHomeLines ?? undefined
+              : undefined
           }
         />
       ))}

@@ -140,7 +140,7 @@ const statusClassName =
   "text-left text-xl font-semibold tracking-tight text-foreground";
 
 const statusDetailRowClassName =
-  "text-left text-lg font-medium tracking-tight text-muted -ml-2 flex items-baseline gap-2";
+  "text-left text-lg font-medium tracking-tight -ml-2 flex items-baseline gap-2";
 
 function getEditDefaults(lastMeal: LastMeal | null, now: Date) {
   if (lastMeal) {
@@ -157,7 +157,7 @@ function getEditDefaults(lastMeal: LastMeal | null, now: Date) {
 }
 
 const statusDoneRowClassName =
-  "text-done-soft line-through decoration-done-soft decoration-2";
+  "text-done-soft line-through decoration-done-soft decoration-1";
 
 const EMOJI_SEGMENT_PATTERN =
   /(\p{Extended_Pictographic}\uFE0F?|\p{Emoji_Presentation})/gu;
@@ -168,6 +168,11 @@ function isEmojiSegment(value: string): boolean {
 
 function splitEatPhaseSegments(value: string): string[] {
   return value.split(EMOJI_SEGMENT_PATTERN).filter((part) => part.length > 0);
+}
+
+function normalizeForNotoMono(value: string): string {
+  // Noto Emoji renders text-presentation glyphs; VS16 often forces a color fallback.
+  return value.replace(/\uFE0F/g, "");
 }
 
 function EatPhaseEmoji({
@@ -189,7 +194,7 @@ function EatPhaseEmoji({
 
   return (
     <span className={className} aria-hidden={!inline}>
-      {children}
+      {isDone ? normalizeForNotoMono(children) : children}
     </span>
   );
 }
@@ -228,7 +233,7 @@ function EatStatus({ lastMeal, now }: { lastMeal: LastMeal; now: Date }) {
           <p
             key={index}
             className={`${statusDetailRowClassName} ${
-              row.isDone ? statusDoneRowClassName : ""
+              row.isDone ? statusDoneRowClassName : "text-muted"
             }`}
           >
             <EatPhaseEmoji isDone={row.isDone}>{row.icon}</EatPhaseEmoji>

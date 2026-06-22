@@ -2,15 +2,19 @@ import Link from "next/link";
 import { CategoryStars } from "@/components/CategoryStars";
 import type { Category } from "@/lib/categories";
 import type { CategoryProgress } from "@/lib/category-progress";
-import type { MealCardStatus } from "@/lib/eat-meal";
+import type { EatHomeCardLine } from "@/lib/eat-meal";
 
 type CategoryCardProps = {
   category: Category;
   progress?: CategoryProgress;
-  eatStatus?: MealCardStatus;
+  eatHomeLines?: EatHomeCardLine[];
 };
 
-export function CategoryCard({ category, progress, eatStatus }: CategoryCardProps) {
+export function CategoryCard({
+  category,
+  progress,
+  eatHomeLines,
+}: CategoryCardProps) {
   return (
     <Link
       href={`/${category.slug}`}
@@ -25,14 +29,25 @@ export function CategoryCard({ category, progress, eatStatus }: CategoryCardProp
           {category.name}
         </span>
       </div>
-      {eatStatus ? (
+      {eatHomeLines ? (
         <div className="w-full shrink-0 px-0.5 pb-2 text-left">
-          <p className="line-clamp-3 font-category text-sm font-medium leading-snug text-muted">
-            <span className="eat-phase-emoji-color-inline" aria-hidden>
-              {eatStatus.icon}
-            </span>{" "}
-            {eatStatus.label}
-          </p>
+          {eatHomeLines.map((line, index) => (
+            <p
+              key={index}
+              className={`font-category text-sm font-medium leading-snug text-muted ${
+                line.italic ? "mt-1.5 italic" : ""
+              }`}
+            >
+              {line.leadingIcon ? (
+                <>
+                  <span className="eat-phase-emoji-color-inline" aria-hidden>
+                    {line.leadingIcon}
+                  </span>{" "}
+                </>
+              ) : null}
+              {line.text}
+            </p>
+          ))}
         </div>
       ) : null}
     </Link>

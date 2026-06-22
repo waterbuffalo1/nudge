@@ -81,20 +81,24 @@ body {
 
 .eat-phase-emoji-mono {
   display: inline-block;
-  font-family: "Noto Emoji";
+  font-family: "Noto Emoji", "Noto Color Emoji";
   font-size: 1.125rem;
   font-style: normal;
   font-weight: 400;
+  font-variant-emoji: text;
   line-height: 1;
   vertical-align: baseline;
+  color: inherit;
 }
 
 .eat-phase-emoji-mono-inline {
   display: inline;
-  font-family: "Noto Emoji";
+  font-family: "Noto Emoji", "Noto Color Emoji";
   font-style: normal;
   font-weight: 400;
+  font-variant-emoji: text;
   line-height: inherit;
+  color: inherit;
 }
 
 body::before {
