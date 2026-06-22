@@ -6,7 +6,10 @@ import {
   formatRelativeTime,
   formatRelativeTimeRange,
   formatTimeRange,
+  getActiveMealCardStatus,
+  getActiveMealStatus,
   getAutophagyStatusText,
+  getCurrentMealStatusRow,
   getDigestionStatusText,
   getEatingFromStorageStatusText,
   getMealPhase,
@@ -148,6 +151,59 @@ describe("eat meal windows", () => {
     expect(statusRows[0]?.isDone).toBe(true);
     expect(statusRows[1]?.isDone).toBe(false);
     expect(statusRows[2]?.isDone).toBe(false);
+
+    const currentStatus = getCurrentMealStatusRow(windows, duringPancreasRampDown);
+    expect(currentStatus.text).toBe(
+      "pancreas is ramping down and we will approach our blood sugar baseline until 10pm tonight...",
+    );
+  });
+
+  it("returns the active meal status for the home eat card", () => {
+    const selectedAt = roundToNearest15Minutes(
+      new Date("2026-06-17T18:07:00-04:00"),
+    );
+    const lastMeal = {
+      mealSize: "reasonable meal" as const,
+      selectedAt: selectedAt.toISOString(),
+    };
+    const duringEatingFromStorage = new Date("2026-06-17T23:00:00-04:00");
+
+    const originalWindow = globalThis.window;
+    const storage = new Map<string, string>([
+      ["nudge-eat-last-meal", JSON.stringify(lastMeal)],
+    ]);
+
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        localStorage: {
+          getItem: (key: string) => storage.get(key) ?? null,
+          setItem: (key: string, value: string) => {
+            storage.set(key, value);
+          },
+          removeItem: (key: string) => {
+            storage.delete(key);
+          },
+        },
+      },
+    });
+
+    try {
+      const status = getActiveMealCardStatus(duringEatingFromStorage);
+      expect(status).toEqual({
+        icon: "🍯",
+        label: "snacking on liver glycogen (nom nom nom)...",
+      });
+    } finally {
+      if (originalWindow) {
+        Object.defineProperty(globalThis, "window", {
+          configurable: true,
+          value: originalWindow,
+        });
+      } else {
+        Reflect.deleteProperty(globalThis, "window");
+      }
+    }
   });
 
   it("formats cross-day ranges with tomorrow and the day after that", () => {

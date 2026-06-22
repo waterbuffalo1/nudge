@@ -5,6 +5,9 @@ import { CategoryCard } from "@/components/CategoryCard";
 import { getActivitiesForCategory } from "@/lib/activities";
 import { categories } from "@/lib/categories";
 import type { CategoryProgress } from "@/lib/category-progress";
+import { getActiveMealCardStatus, type MealCardStatus } from "@/lib/eat-meal";
+
+const EAT_CATEGORY_SLUG = "eat";
 
 function getClientTimeZone() {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -26,6 +29,11 @@ export function CategoryGrid() {
   const [progressByCategory, setProgressByCategory] = useState<
     Record<string, CategoryProgress>
   >(getBuiltInProgress);
+  const [eatStatus, setEatStatus] = useState<MealCardStatus | null>(null);
+
+  const refreshEatStatus = useCallback(() => {
+    setEatStatus(getActiveMealCardStatus(new Date()));
+  }, []);
 
   const loadProgress = useCallback(async () => {
     const timeZone = getClientTimeZone();
@@ -43,15 +51,22 @@ export function CategoryGrid() {
   }, []);
 
   useEffect(() => {
+    refreshEatStatus();
     void loadProgress();
 
+    const intervalId = window.setInterval(refreshEatStatus, 60_000);
+
     const handleFocus = () => {
+      refreshEatStatus();
       void loadProgress();
     };
 
     window.addEventListener("focus", handleFocus);
-    return () => window.removeEventListener("focus", handleFocus);
-  }, [loadProgress]);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [loadProgress, refreshEatStatus]);
 
   const displayProgress = useMemo(() => {
     const builtIn = getBuiltInProgress();
@@ -71,6 +86,9 @@ export function CategoryGrid() {
           key={category.slug}
           category={category}
           progress={displayProgress[category.slug]}
+          eatStatus={
+            category.slug === EAT_CATEGORY_SLUG ? eatStatus ?? undefined : undefined
+          }
         />
       ))}
     </div>

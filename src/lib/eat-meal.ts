@@ -482,6 +482,60 @@ export function getMealStatusRows(
   ];
 }
 
+export function getCurrentMealStatusRow(
+  windows: MealWindows,
+  now: Date,
+): MealStatusRow {
+  const currentPhase = getMealPhase(windows, now);
+  const rows = getMealStatusRows(windows, now);
+  const index = MEAL_PHASE_ORDER.indexOf(currentPhase);
+
+  return rows[index] ?? rows[0]!;
+}
+
+export type MealCardStatus = {
+  icon: string;
+  label: string;
+};
+
+function getPhaseCardLabel(phase: MealPhase): string {
+  switch (phase) {
+    case "digestion":
+      return "body is processing food...";
+    case "pancreas-ramp-down":
+      return "pancreas is ramping down and we will approach our blood sugar baseline...";
+    case "eating-from-storage":
+      return "snacking on liver glycogen (nom nom nom)...";
+    case "autophagy":
+      return "autophagy. cleaning crew is working! 🧹...";
+  }
+}
+
+export function getActiveMealCardStatus(now: Date): MealCardStatus | null {
+  const lastMeal = readLastMeal();
+  if (!lastMeal || !isMealActive(lastMeal, now)) {
+    return null;
+  }
+
+  const windows = getMealWindows(new Date(lastMeal.selectedAt), lastMeal.mealSize);
+  const currentRow = getCurrentMealStatusRow(windows, now);
+
+  return {
+    icon: currentRow.icon,
+    label: getPhaseCardLabel(getMealPhase(windows, now)),
+  };
+}
+
+export function getActiveMealStatus(now: Date): MealStatusRow | null {
+  const lastMeal = readLastMeal();
+  if (!lastMeal || !isMealActive(lastMeal, now)) {
+    return null;
+  }
+
+  const windows = getMealWindows(new Date(lastMeal.selectedAt), lastMeal.mealSize);
+  return getCurrentMealStatusRow(windows, now);
+}
+
 /** @deprecated Use getDigestionStatusText */
 export function getProcessingStatusText(
   windows: MealWindows,
