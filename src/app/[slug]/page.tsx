@@ -3,9 +3,7 @@ import { notFound } from "next/navigation";
 import { CategoryActivities } from "@/components/CategoryActivities";
 import { EatScreen } from "@/components/EatScreen";
 import { getActivitiesForCategory } from "@/lib/activities";
-import { getCategoryBySlug } from "@/lib/categories";
-
-const EAT_CATEGORY_SLUG = "eat";
+import { EAT_CATEGORY_SLUG, getCategoryBySlug } from "@/lib/categories";
 
 type CategoryPageProps = {
   params: Promise<{ slug: string }>;

@@ -3,15 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CategoryCard } from "@/components/CategoryCard";
 import { getActivitiesForCategory } from "@/lib/activities";
-import { categories } from "@/lib/categories";
+import { categories, EAT_CATEGORY_SLUG } from "@/lib/categories";
 import type { CategoryProgress } from "@/lib/category-progress";
+import { getClientTimeZone } from "@/lib/client-timezone";
 import { getActiveMealCardStatus, type MealCardStatus } from "@/lib/eat-meal";
-
-const EAT_CATEGORY_SLUG = "eat";
-
-function getClientTimeZone() {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone;
-}
 
 function getBuiltInProgress(): Record<string, CategoryProgress> {
   return Object.fromEntries(

@@ -526,29 +526,6 @@ export function getActiveMealCardStatus(now: Date): MealCardStatus | null {
   };
 }
 
-export function getActiveMealStatus(now: Date): MealStatusRow | null {
-  const lastMeal = readLastMeal();
-  if (!lastMeal || !isMealActive(lastMeal, now)) {
-    return null;
-  }
-
-  const windows = getMealWindows(new Date(lastMeal.selectedAt), lastMeal.mealSize);
-  return getCurrentMealStatusRow(windows, now);
-}
-
-/** @deprecated Use getDigestionStatusText */
-export function getProcessingStatusText(
-  windows: MealWindows,
-  now: Date,
-): string {
-  return getDigestionStatusText(windows, now);
-}
-
-/** @deprecated Use getPancreasRampDownStatusText */
-export function getRestStatusText(windows: MealWindows, now: Date): string {
-  return getPancreasRampDownStatusText(windows, now);
-}
-
 export function isMealActive(lastMeal: LastMeal, now: Date): boolean {
   const windows = getMealWindows(new Date(lastMeal.selectedAt), lastMeal.mealSize);
   return now < windows.autophagyEnd;

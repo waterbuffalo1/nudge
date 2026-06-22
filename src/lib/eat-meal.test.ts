@@ -7,7 +7,6 @@ import {
   formatRelativeTimeRange,
   formatTimeRange,
   getActiveMealCardStatus,
-  getActiveMealStatus,
   getAutophagyStatusText,
   getCurrentMealStatusRow,
   getDigestionStatusText,

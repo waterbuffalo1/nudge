@@ -4,6 +4,8 @@ export type Category = {
   emoji: string;
 };
 
+export const EAT_CATEGORY_SLUG = "eat";
+
 export const categories: Category[] = [
   { slug: "eat", name: "eat", emoji: "🍽️" },
   { slug: "better-sleep", name: "better sleep", emoji: "😴" },

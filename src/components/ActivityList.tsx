@@ -1,38 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Activity } from "@/lib/activities";
 import { ActivityCard } from "@/components/ActivityCard";
+import { isActivityCompleted } from "@/lib/activity-completion";
+import { getClientTimeZone } from "@/lib/client-timezone";
 import {
   DAYTIME_EXERCISE_CATEGORY,
-  DAYTIME_EXERCISE_SLUG,
   EXERCISE_CATEGORY,
-  isDaytimeExerciseDone,
 } from "@/lib/daytime-exercise";
 
 type ActivityListProps = {
   categorySlug: string;
   activities: Activity[];
 };
-
-function getClientTimeZone() {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone;
-}
-
-function isActivityDone(
-  activitySlug: string,
-  completedSlugs: Set<string>,
-  exerciseCompletedSlugs: Set<string>,
-) {
-  if (activitySlug === DAYTIME_EXERCISE_SLUG) {
-    return isDaytimeExerciseDone({
-      betterSleepCompleted: completedSlugs,
-      exerciseCompleted: exerciseCompletedSlugs,
-    });
-  }
-
-  return completedSlugs.has(activitySlug);
-}
 
 export function ActivityList({ categorySlug, activities }: ActivityListProps) {
   const [completedSlugs, setCompletedSlugs] = useState<Set<string>>(
@@ -45,6 +26,15 @@ export function ActivityList({ categorySlug, activities }: ActivityListProps) {
 
   const timeZone = getClientTimeZone();
   const needsExerciseCompletions = categorySlug === DAYTIME_EXERCISE_CATEGORY;
+
+  const completedByCategory = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    map.set(categorySlug, completedSlugs);
+    if (needsExerciseCompletions) {
+      map.set(EXERCISE_CATEGORY, exerciseCompletedSlugs);
+    }
+    return map;
+  }, [categorySlug, completedSlugs, exerciseCompletedSlugs, needsExerciseCompletions]);
 
   useEffect(() => {
     let cancelled = false;
@@ -155,10 +145,10 @@ export function ActivityList({ categorySlug, activities }: ActivityListProps) {
           activity={activity}
           isDone={
             loaded &&
-            isActivityDone(
+            isActivityCompleted(
               activity.slug,
-              completedSlugs,
-              exerciseCompletedSlugs,
+              categorySlug,
+              completedByCategory,
             )
           }
           onComplete={() => handleComplete(activity.slug)}
