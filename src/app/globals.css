@@ -71,6 +71,10 @@ body {
   vertical-align: baseline;
 }
 
+.eat-info-screen .eat-phase-emoji-color-inline {
+  font-family: "Noto Color Emoji";
+}
+
 .eat-phase-emoji-color-inline {
   display: inline;
   font-family: "Noto Color Emoji";

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { TimeRoller } from "@/components/TimeRoller";
+import { EatInfoScreen } from "@/components/EatInfoScreen";
 import {
   clearLastMeal,
   dateFromPickerValues,
@@ -21,7 +22,7 @@ import {
   type PickerMeridiem,
 } from "@/lib/eat-meal";
 
-type EatStep = "ask" | "no" | "yes" | "edit";
+type EatStep = "ask" | "no" | "yes" | "edit" | "info";
 
 const NO_SCREEN_MS = 2500;
 
@@ -83,14 +84,35 @@ function EditIcon() {
   );
 }
 
+function InfoIcon() {
+  return (
+    <svg
+      className="size-3.5 shrink-0"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      aria-hidden
+    >
+      <circle cx="8" cy="8" r="6.25" />
+      <path d="M8 7.25V11" strokeLinecap="round" />
+      <circle cx="8" cy="5.15" r="0.75" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 function EatHeader({
   activeMeal,
+  infoOpen,
   onEdit,
   onReset,
+  onInfo,
 }: {
   activeMeal: LastMeal | null;
+  infoOpen: boolean;
   onEdit: () => void;
   onReset: () => void;
+  onInfo: () => void;
 }) {
   return (
     <div className="mb-8 flex items-start justify-between">
@@ -98,6 +120,16 @@ function EatHeader({
         ← back
       </Link>
       <div className="flex flex-col items-end gap-2">
+        <button
+          type="button"
+          className={`${navLinkClassName} flex items-center gap-1.5 ${
+            infoOpen ? "text-foreground" : ""
+          }`}
+          onClick={onInfo}
+        >
+          <InfoIcon />
+          info
+        </button>
         <button
           type="button"
           className={`${navLinkClassName} flex items-center gap-1.5`}
@@ -404,13 +436,30 @@ export function EatScreen() {
     setStep("ask");
   }
 
+  function handleInfoToggle() {
+    setStep((current) => (current === "info" ? "ask" : "info"));
+  }
+
   const header = (
     <EatHeader
       activeMeal={activeMeal}
+      infoOpen={step === "info"}
       onEdit={handleEditOpen}
       onReset={handleReset}
+      onInfo={handleInfoToggle}
     />
   );
+
+  if (step === "info") {
+    return (
+      <>
+        {header}
+        <div className="flex min-h-[calc(100dvh-6rem)] flex-1 flex-col overflow-hidden">
+          <EatInfoScreen />
+        </div>
+      </>
+    );
+  }
 
   if (step === "edit") {
     return (
