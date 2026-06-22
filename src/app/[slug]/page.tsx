@@ -28,14 +28,14 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
         isEat ? "" : "category-page-main"
       }`}
     >
-      <Link
-        href="/"
-        className="mb-8 text-sm font-medium text-muted active:text-foreground"
-      >
-        ← back
-      </Link>
       {!isEat ? (
         <>
+          <Link
+            href="/"
+            className="mb-8 text-sm font-medium text-muted active:text-foreground"
+          >
+            ← back
+          </Link>
           <h1 className="mb-8 text-xl font-semibold text-foreground">
             {category.emoji} {category.name}
           </h1>

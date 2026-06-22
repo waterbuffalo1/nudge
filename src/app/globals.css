@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&family=Noto+Emoji:wght@400&display=swap");
 @import "tailwindcss";
 
 :root {
@@ -9,6 +10,7 @@
   --foreground: #403b35;
   --foreground-muted: #6f6860;
   --foreground-done: #9a9288;
+  --foreground-done-soft: color-mix(in srgb, var(--foreground-done) 50%, var(--background));
   --border: #a39b91;
   --vignette-x: 50%;
   --vignette-y: 32%;
@@ -27,10 +29,13 @@
   --color-foreground: var(--foreground);
   --color-muted: var(--foreground-muted);
   --color-done: var(--foreground-done);
+  --color-done-soft: var(--foreground-done-soft);
   --color-border: var(--border);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-category: var(--font-montserrat);
+  --font-emoji-color: "Noto Color Emoji";
+  --font-emoji-mono: "Noto Emoji";
 }
 
 html {
@@ -54,6 +59,42 @@ body {
   padding-bottom: calc(
     var(--add-bar-reserve) + max(1rem, env(safe-area-inset-bottom))
   );
+}
+
+.eat-phase-emoji-color {
+  display: inline-block;
+  font-family: "Noto Color Emoji";
+  font-size: 1.125rem;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1;
+  vertical-align: baseline;
+}
+
+.eat-phase-emoji-color-inline {
+  display: inline;
+  font-family: "Noto Color Emoji";
+  font-style: normal;
+  font-weight: 400;
+  line-height: inherit;
+}
+
+.eat-phase-emoji-mono {
+  display: inline-block;
+  font-family: "Noto Emoji";
+  font-size: 1.125rem;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1;
+  vertical-align: baseline;
+}
+
+.eat-phase-emoji-mono-inline {
+  display: inline;
+  font-family: "Noto Emoji";
+  font-style: normal;
+  font-weight: 400;
+  line-height: inherit;
 }
 
 body::before {
