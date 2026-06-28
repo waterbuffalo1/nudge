@@ -49,6 +49,16 @@ export function roundToNearest15Minutes(date: Date): Date {
   return rounded;
 }
 
+/** Nearest-round clock has reached this meal's rounded start time. */
+export function isMealCycleStarted(cycleStart: Date, now: Date): boolean {
+  return roundToNearest15Minutes(now).getTime() >= cycleStart.getTime();
+}
+
+/** Phase boundaries use the same nearest-round clock as cycle start. */
+export function getPhaseClock(at: Date): Date {
+  return roundToNearest15Minutes(at);
+}
+
 export function addHours(date: Date, hours: number): Date {
   return new Date(date.getTime() + hours * 60 * 60 * 1000);
 }

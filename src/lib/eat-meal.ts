@@ -2,6 +2,7 @@ import {
   formatFatStorageLabel,
   hoursToReachLiverFloor,
   simulateMetabolicState,
+  AUTOPHAGY_HOURS,
   FAT_STORAGE_BASELINE_GRAMS,
   LIVER_FLOOR_GRAMS,
   type MetabolicState,
@@ -9,6 +10,7 @@ import {
 import {
   addHours,
   getMealWindows,
+  getPhaseClock,
   roundToNearest15Minutes,
   type LoggedMeal,
   type MealPhase,
@@ -20,6 +22,8 @@ import {
 export {
   MEAL_SIZES,
   getMealWindows,
+  getPhaseClock,
+  isMealCycleStarted,
   roundToNearest15Minutes,
   type LoggedMeal,
   type MealPhase,
@@ -29,10 +33,18 @@ export {
 export {
   formatFatStorageLabel,
   getCumulativeFillGrams,
+  getDrainableLiverGrams,
+  getLiverCapacityPercent,
+  getLiverGramsForMoonDisplay,
+  getLiverMoonFillPercent,
+  getMoonPhaseEmojiForLiverGrams,
+  getMoonPhaseEmojiForLiverPercent,
+  getMoonPhaseEmojiForMeals,
   hoursToReachLiverFloor,
   liverAfterDrainHours,
   simulateMetabolicState,
   LIVER_CAP_GRAMS,
+  LIVER_DRAINABLE_CAP_GRAMS,
   LIVER_FLOOR_GRAMS,
   FAT_STORAGE_BASELINE_GRAMS,
   type MetabolicState,
@@ -57,15 +69,63 @@ const MEAL_PHASE_ORDER: MealPhase[] = [
 
 export const PICKER_MINUTES = [0, 15, 30, 45] as const;
 export const PICKER_HOURS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
+export const PICKER_DAY_OFFSETS = [0, 1, 2] as const;
 export type PickerMeridiem = "am" | "pm";
+export type PickerDayOffset = (typeof PICKER_DAY_OFFSETS)[number];
+
+export const PICKER_DAY_LABELS: Record<PickerDayOffset, string> = {
+  0: "today",
+  1: "yesterday",
+  2: "day before yesterday",
+};
 
 export type MealTimePickerValues = {
   hour12: (typeof PICKER_HOURS)[number];
   minute: (typeof PICKER_MINUTES)[number];
   meridiem: PickerMeridiem;
+  dayOffset: PickerDayOffset;
 };
 
-export function dateToPickerValues(date: Date): MealTimePickerValues {
+export function startOfLocalDay(date: Date): Date {
+  const result = new Date(date);
+  result.setHours(0, 0, 0, 0);
+  return result;
+}
+
+export function dayOffsetFromDate(
+  date: Date,
+  relativeTo: Date = new Date(),
+): PickerDayOffset {
+  const dayMs = 86_400_000;
+  const offset = Math.round(
+    (startOfLocalDay(relativeTo).getTime() - startOfLocalDay(date).getTime()) /
+      dayMs,
+  );
+
+  if (offset <= 0) {
+    return 0;
+  }
+
+  if (offset === 1) {
+    return 1;
+  }
+
+  return 2;
+}
+
+export function baseDateFromDayOffset(
+  dayOffset: PickerDayOffset,
+  relativeTo: Date = new Date(),
+): Date {
+  const result = startOfLocalDay(relativeTo);
+  result.setDate(result.getDate() - dayOffset);
+  return result;
+}
+
+export function dateToPickerValues(
+  date: Date,
+  relativeTo: Date = new Date(),
+): MealTimePickerValues {
   const hours = date.getHours();
   const minute = (Math.round(date.getMinutes() / 15) * 15) % 60 as MealTimePickerValues["minute"];
   const meridiem: PickerMeridiem = hours >= 12 ? "pm" : "am";
@@ -78,6 +138,7 @@ export function dateToPickerValues(date: Date): MealTimePickerValues {
     hour12: hour12 as MealTimePickerValues["hour12"],
     minute,
     meridiem,
+    dayOffset: dayOffsetFromDate(date, relativeTo),
   };
 }
 
@@ -85,9 +146,13 @@ export function dateFromPickerValues({
   hour12,
   minute,
   meridiem,
-  baseDate = new Date(),
-}: MealTimePickerValues & { baseDate?: Date }): Date {
-  const result = new Date(baseDate);
+  dayOffset,
+  baseDate,
+  relativeTo = new Date(),
+}: MealTimePickerValues & { baseDate?: Date; relativeTo?: Date }): Date {
+  const result = baseDate
+    ? startOfLocalDay(baseDate)
+    : baseDateFromDayOffset(dayOffset, relativeTo);
   let hour24: number;
 
   if (meridiem === "am") {
@@ -101,17 +166,18 @@ export function dateFromPickerValues({
 }
 
 export function formatFriendlyTime(date: Date): string {
+  const rounded = roundToNearest15Minutes(date);
   const options: Intl.DateTimeFormatOptions = {
     hour: "numeric",
     hour12: true,
   };
 
-  if (date.getMinutes() !== 0) {
+  if (rounded.getMinutes() !== 0) {
     options.minute = "2-digit";
   }
 
   return new Intl.DateTimeFormat(undefined, options)
-    .format(date)
+    .format(rounded)
     .toLowerCase()
     .replace(/\s/g, "");
 }
@@ -122,6 +188,37 @@ function getMeridiem(time: string): "am" | "pm" | null {
   return null;
 }
 
+export const TIME_RANGE_HYPHEN = "\u2011";
+
+const TIME_RANGE_TEXT_PATTERN =
+  /^\d{1,2}(?::\d{2})?(?:am|pm)[\u2011-]\d{1,2}(?::\d{2})?(?:am|pm)$/i;
+
+export function isTimeRangeText(value: string): boolean {
+  return TIME_RANGE_TEXT_PATTERN.test(value);
+}
+
+export function splitTextAtTimeRanges(value: string): string[] {
+  const pattern =
+    /\d{1,2}(?::\d{2})?(?:am|pm)[\u2011-]\d{1,2}(?::\d{2})?(?:am|pm)/gi;
+  const parts: string[] = [];
+  let lastIndex = 0;
+
+  for (const match of value.matchAll(pattern)) {
+    const start = match.index ?? 0;
+    if (start > lastIndex) {
+      parts.push(value.slice(lastIndex, start));
+    }
+    parts.push(match[0]);
+    lastIndex = start + match[0].length;
+  }
+
+  if (lastIndex < value.length) {
+    parts.push(value.slice(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : [value];
+}
+
 export function formatTimeRange(start: Date, end: Date): string {
   const startTime = formatFriendlyTime(start);
   const endTime = formatFriendlyTime(end);
@@ -129,16 +226,10 @@ export function formatTimeRange(start: Date, end: Date): string {
   const endMeridiem = getMeridiem(endTime);
 
   if (startMeridiem && startMeridiem === endMeridiem) {
-    return `${startTime.slice(0, -2)}-${endTime}`;
+    return `${startTime.slice(0, -2)}${TIME_RANGE_HYPHEN}${endTime}`;
   }
 
-  return `${startTime}-${endTime}`;
-}
-
-function startOfLocalDay(date: Date): Date {
-  const result = new Date(date);
-  result.setHours(0, 0, 0, 0);
-  return result;
+  return `${startTime}${TIME_RANGE_HYPHEN}${endTime}`;
 }
 
 function getDayOffset(date: Date, now: Date): number {
@@ -225,11 +316,16 @@ function getLatestMealPhase(
   windows: MealWindows,
   now: Date,
 ): "digestion" | "pancreas-ramp-down" | "past-pancreas" {
-  if (now.getTime() < windows.digestionEnd.getTime()) {
-    return "digestion";
-  }
+  const clock = getPhaseClock(now);
 
-  if (now.getTime() < windows.pancreasRampDownEnd.getTime()) {
+  if (
+    clock.getTime() >= windows.digestionStart.getTime() &&
+    now.getTime() < windows.pancreasRampDownEnd.getTime()
+  ) {
+    if (now.getTime() < windows.digestionEnd.getTime()) {
+      return "digestion";
+    }
+
     return "pancreas-ramp-down";
   }
 
@@ -354,55 +450,77 @@ export function getPancreasRampDownStatusText(
   });
 }
 
-function formatGrams(grams: number): string {
-  const rounded = Math.round(grams * 10) / 10;
-  return rounded % 1 === 0 ? `${rounded}` : rounded.toFixed(1);
+function getLiverAutophagyTiming(state: CombinedEatState, now: Date) {
+  const drainStart = state.latestWindows.pancreasRampDownEnd;
+
+  let switchZoneAt: Date;
+  if (state.currentPhase === "eating-from-storage") {
+    switchZoneAt = addHours(now, hoursToReachLiverFloor(state.liverGrams));
+  } else if (
+    state.currentPhase === "autophagy" &&
+    state.autophagyStartedAt
+  ) {
+    switchZoneAt = state.autophagyStartedAt;
+  } else {
+    const projected = simulateMetabolicState(state.meals, drainStart);
+    const gramsAtDrain =
+      projected?.liverGrams ??
+      Math.max(state.liverGrams, LIVER_FLOOR_GRAMS);
+    switchZoneAt = addHours(drainStart, hoursToReachLiverFloor(gramsAtDrain));
+  }
+
+  const autophagyEnd =
+    state.currentPhase === "autophagy" && state.autophagyEnd
+      ? state.autophagyEnd
+      : addHours(switchZoneAt, AUTOPHAGY_HOURS);
+
+  return { drainStart, switchZoneAt, autophagyEnd };
 }
 
-export function getLiverTankStatusText(
+export function getEatingFromStorageStatusText(
   state: CombinedEatState,
   now: Date,
 ): string {
+  const { drainStart, switchZoneAt } = getLiverAutophagyTiming(state, now);
   const relation = getPhaseRelation("eating-from-storage", state.currentPhase);
 
-  if (relation === "past") {
-    return `liver reached the metabolic switch zone at ${formatGrams(LIVER_FLOOR_GRAMS)}g.`;
+  if (relation === "current") {
+    return `snacking on liver glycogen (nom nom nom) until ${formatRelativeTime(switchZoneAt, now)}...`;
   }
+
+  if (switchZoneAt.getTime() <= drainStart.getTime()) {
+    const at = formatRelativeTime(drainStart, now);
+    if (relation === "future") {
+      return `will snack on liver glycogen (nom nom nom) at ${at}.`;
+    }
+    return `snacked on liver glycogen (nom nom nom) at ${at}.`;
+  }
+
+  const range = formatRelativeTimeRange(drainStart, switchZoneAt, now);
 
   if (relation === "future") {
-    return `liver will drain toward the metabolic switch zone (~${formatGrams(LIVER_FLOOR_GRAMS)}g)...`;
+    return `will snack on liver glycogen (nom nom nom) from ${range}.`;
   }
 
-  if (state.liverGrams <= LIVER_FLOOR_GRAMS) {
-    return `liver at metabolic switch zone (${formatGrams(state.liverGrams)}g)...`;
-  }
-
-  const switchAt = addHours(now, hoursToReachLiverFloor(state.liverGrams));
-  return `liver pantry at ${formatGrams(state.liverGrams)}g... draining to switch zone until ${formatRelativeTime(switchAt, now)}...`;
+  return `snacked on liver glycogen (nom nom nom) from ${range}.`;
 }
 
-export function getAutophagyTankStatusText(
+export function getAutophagyStatusText(
   state: CombinedEatState,
   now: Date,
 ): string {
+  const { switchZoneAt } = getLiverAutophagyTiming(state, now);
   const relation = getPhaseRelation("autophagy", state.currentPhase);
-  const fatLabel = formatFatStorageLabel(
-    FAT_STORAGE_BASELINE_GRAMS,
-    state.fatDeltaGrams,
-  );
 
-  if (relation === "past") {
-    return `autophagy finished. fat storage ${fatLabel}.`;
+  if (relation === "current") {
+    return `autophagy. cleaning crew is working! 🧹`;
   }
 
   if (relation === "future") {
-    return `autophagy will start at the metabolic switch zone. fat storage ${fatLabel}.`;
+    return `autophagy. let's clean those streets! 🧹 starting at ${formatRelativeTime(switchZoneAt, now)}.`;
   }
 
-  const until = state.autophagyEnd
-    ? formatRelativeTime(state.autophagyEnd, now)
-    : "soon";
-  return `autophagy. cleaning crew is working! 🧹 until ${until}... fat storage ${fatLabel}.`;
+  return `autophagy. cleaned those streets! 🧹`;
 }
 
 export function getFatStorageStatusText(state: CombinedEatState): string {
@@ -434,7 +552,7 @@ export function getMealStatusRows(
   }
 
   return [
-    row("digestion", "⚙️", getDigestionStatusText(windows, now, currentPhase)),
+    row("digestion", "🔨", getDigestionStatusText(windows, now, currentPhase)),
     row(
       "pancreas-ramp-down",
       "🫁",
@@ -443,9 +561,9 @@ export function getMealStatusRows(
     row(
       "eating-from-storage",
       "🍯",
-      "liver will drain after pancreas finishes...",
+      "will snack on liver glycogen (nom nom nom) after pancreas finishes...",
     ),
-    row("autophagy", "♻️", "autophagy starts at the metabolic switch zone..."),
+    row("autophagy", "♻️", "autophagy. let's clean those streets! 🧹..."),
   ];
 }
 
@@ -482,7 +600,7 @@ function eatActivityNudge(
 
 const EAT_HOME_LINES_BY_PHASE: Record<MealPhase, EatHomeCardLine[]> = {
   digestion: [
-    eatPhaseLine("⚙️", "digesting..."),
+    eatPhaseLine("🔨", "digesting..."),
     eatActivityNudge("🚶🏻‍♀️", "good time to go for a walk!"),
   ],
   "pancreas-ramp-down": [
@@ -548,14 +666,14 @@ export function getCombinedMealStatusRows(
   }
 
   return [
-    row("digestion", "⚙️", getDigestionStatusText(latestWindows, now, currentPhase)),
+    row("digestion", "🔨", getDigestionStatusText(latestWindows, now, currentPhase)),
     row(
       "pancreas-ramp-down",
       "🫁",
       getPancreasRampDownStatusText(latestWindows, now, currentPhase),
     ),
-    row("eating-from-storage", "🍯", getLiverTankStatusText(state, now)),
-    row("autophagy", "♻️", getAutophagyTankStatusText(state, now)),
+    row("eating-from-storage", "🍯", getEatingFromStorageStatusText(state, now)),
+    row("autophagy", "♻️", getAutophagyStatusText(state, now)),
   ];
 }
 
@@ -680,8 +798,9 @@ export function updateLatestLoggedMeal(
   selectedAt: Date,
 ): LoggedMeal[] {
   const meals = readLoggedMeals();
+  const now = new Date();
   if (meals.length === 0) {
-    return addLoggedMeal(mealSize, selectedAt, new Date());
+    return addLoggedMeal(mealSize, selectedAt, now);
   }
 
   const latestMeal = getLatestLoggedMeal(meals);

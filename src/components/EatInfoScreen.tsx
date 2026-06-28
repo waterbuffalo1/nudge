@@ -1,39 +1,77 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 import {
-  EAT_INFO_SECTIONS,
   type EatInfoBlock,
+  type EatInfoBullet,
+  type EatInfoSection,
   type EatInfoSubsection,
-} from "@/lib/eat-info-content";
+} from "@/lib/eat-info-types";
 
-const FONT_SCALE_STEPS = [0.85, 0.925, 1, 1.1, 1.2, 1.35] as const;
-const DEFAULT_FONT_SCALE_INDEX = 2;
-const EAT_INFO_FONT_SCALE_KEY = "eat-info-font-scale";
+const sectionTitleClassName =
+  "eat-info-section-title text-lg font-semibold tracking-tight text-foreground";
 
-const fontControlClassName =
-  "flex size-8 touch-manipulation items-center justify-center rounded-full text-base font-medium text-muted active:text-foreground disabled:opacity-35 disabled:active:text-muted";
+const blockTitleClassName =
+  "eat-info-block-title text-base font-semibold tracking-tight text-foreground";
 
-function readStoredFontScaleIndex(): number {
-  if (typeof window === "undefined") {
-    return DEFAULT_FONT_SCALE_INDEX;
+const bodyClassName =
+  "eat-info-body text-sm font-medium leading-relaxed tracking-tight text-muted";
+
+const leadClassName = "font-semibold text-foreground";
+
+const listClassName = `${bodyClassName} list-disc pl-5`;
+
+const calloutTitleClassName =
+  "eat-info-callout-title text-sm font-semibold tracking-tight text-foreground";
+
+const noteClassName =
+  "eat-info-note eat-info-body pt-1 text-xs font-medium leading-relaxed tracking-tight text-muted";
+
+function getBulletKey(item: EatInfoBullet): string {
+  return typeof item === "string" ? item : item.label;
+}
+
+function renderBulletText(text: string, hasFootnoteMarker: boolean) {
+  if (!hasFootnoteMarker) {
+    return text;
   }
 
-  const raw = window.localStorage.getItem(EAT_INFO_FONT_SCALE_KEY);
-  if (!raw) {
-    return DEFAULT_FONT_SCALE_INDEX;
+  const colonIndex = text.indexOf(":");
+  if (colonIndex === -1) {
+    return (
+      <>
+        {text}
+        <sup className="relative -top-0.5" aria-hidden>
+          *
+        </sup>
+      </>
+    );
   }
 
-  const parsed = Number.parseInt(raw, 10);
-  if (
-    Number.isNaN(parsed) ||
-    parsed < 0 ||
-    parsed >= FONT_SCALE_STEPS.length
-  ) {
-    return DEFAULT_FONT_SCALE_INDEX;
+  return (
+    <>
+      {text.slice(0, colonIndex)}
+      <sup className="relative -top-0.5" aria-hidden>
+        *
+      </sup>
+      {text.slice(colonIndex)}
+    </>
+  );
+}
+
+function renderBulletItem(
+  item: EatInfoBullet,
+  hasFootnoteMarker: boolean,
+) {
+  if (typeof item === "string") {
+    return renderBulletText(item, hasFootnoteMarker);
   }
 
-  return parsed;
+  return (
+    <>
+      <span className={leadClassName}>{item.label}</span> {item.body}
+    </>
+  );
 }
 
 function InfoEmoji({ icon }: { icon: string }) {
@@ -49,7 +87,7 @@ function InfoSubsection({ subsection }: { subsection: EatInfoSubsection }) {
 
   return (
     <div className="flex flex-col gap-1 pt-1">
-      <h4 className="eat-info-callout-title">
+      <h4 className={calloutTitleClassName}>
         {subsection.titleIcon ? (
           <>
             <InfoEmoji icon={subsection.titleIcon} />{" "}
@@ -58,18 +96,18 @@ function InfoSubsection({ subsection }: { subsection: EatInfoSubsection }) {
         {subsection.title}
       </h4>
       {subsection.lead ? (
-        <p className="eat-info-body">
+        <p className={bodyClassName}>
           {subsection.leadIcon ? (
             <>
               <InfoEmoji icon={subsection.leadIcon} />{" "}
             </>
           ) : null}
-          <span className="eat-info-lead">{subsection.lead}.</span>
+          <span className={leadClassName}>{subsection.lead}.</span>
           {subsection.body?.[0] ? ` ${subsection.body[0]}` : null}
         </p>
       ) : null}
       {subsection.body?.slice(bodyStartIndex).map((paragraph, index) => (
-        <p key={paragraph} className="eat-info-body">
+        <p key={paragraph} className={bodyClassName}>
           {index === 0 && !subsection.lead && subsection.leadIcon ? (
             <>
               <InfoEmoji icon={subsection.leadIcon} />{" "}
@@ -79,11 +117,23 @@ function InfoSubsection({ subsection }: { subsection: EatInfoSubsection }) {
         </p>
       ))}
       {subsection.bullets ? (
-        <ul className="eat-info-body eat-info-list">
-          {subsection.bullets.map((item) => (
-            <li key={item}>{item}</li>
+        <ul className={listClassName}>
+          {subsection.bullets.map((item, index) => (
+            <li key={getBulletKey(item)}>
+              {renderBulletItem(
+                item,
+                Boolean(subsection.note) &&
+                  subsection.footnoteBulletIndex === index,
+              )}
+            </li>
           ))}
         </ul>
+      ) : null}
+      {subsection.note ? (
+        <p className={noteClassName}>
+          <span aria-hidden>* </span>
+          {subsection.note}
+        </p>
       ) : null}
     </div>
   );
@@ -92,9 +142,9 @@ function InfoSubsection({ subsection }: { subsection: EatInfoSubsection }) {
 function InfoBlock({ block }: { block: EatInfoBlock }) {
   return (
     <div className="flex flex-col gap-2">
-      <h3 className="eat-info-block-title">{block.title}</h3>
+      <h3 className={blockTitleClassName}>{block.title}</h3>
       {block.body.map((paragraph) => (
-        <p key={paragraph} className="eat-info-body">
+        <p key={paragraph} className={bodyClassName}>
           {paragraph}
         </p>
       ))}
@@ -102,7 +152,7 @@ function InfoBlock({ block }: { block: EatInfoBlock }) {
         <InfoSubsection key={subsection.title} subsection={subsection} />
       ))}
       {block.bullets ? (
-        <ul className="eat-info-body eat-info-list">
+        <ul className={listClassName}>
           {block.bullets.map((item) => (
             <li key={item}>{item}</li>
           ))}
@@ -112,66 +162,29 @@ function InfoBlock({ block }: { block: EatInfoBlock }) {
   );
 }
 
-export function EatInfoScreen() {
-  const [fontScaleIndex, setFontScaleIndex] = useState(DEFAULT_FONT_SCALE_INDEX);
-
-  useEffect(() => {
-    setFontScaleIndex(readStoredFontScaleIndex());
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem(
-      EAT_INFO_FONT_SCALE_KEY,
-      String(fontScaleIndex),
-    );
-  }, [fontScaleIndex]);
-
-  const canDecrease = fontScaleIndex > 0;
-  const canIncrease = fontScaleIndex < FONT_SCALE_STEPS.length - 1;
-
+export function EatInfoScreen({
+  sections,
+  fontScale,
+}: {
+  sections: EatInfoSection[];
+  fontScale: number;
+}) {
   return (
     <div
       className="eat-info-screen flex min-h-0 flex-1 flex-col overflow-y-auto pb-[max(2.5rem,env(safe-area-inset-bottom))]"
       style={
         {
-          "--eat-info-scale": FONT_SCALE_STEPS[fontScaleIndex],
-        } as React.CSSProperties
+          "--eat-info-scale": fontScale,
+        } as CSSProperties
       }
     >
-      <div className="sticky top-0 z-10 -mx-1 mb-4 flex justify-end gap-1 bg-background/90 pb-2 pt-1 backdrop-blur-sm">
-        <button
-          type="button"
-          className={fontControlClassName}
-          aria-label="Decrease text size"
-          disabled={!canDecrease}
-          onClick={() => {
-            setFontScaleIndex((current) => Math.max(0, current - 1));
-          }}
-        >
-          −
-        </button>
-        <button
-          type="button"
-          className={fontControlClassName}
-          aria-label="Increase text size"
-          disabled={!canIncrease}
-          onClick={() => {
-            setFontScaleIndex((current) =>
-              Math.min(FONT_SCALE_STEPS.length - 1, current + 1),
-            );
-          }}
-        >
-          +
-        </button>
-      </div>
-
       <div className="flex flex-col gap-8 pr-1">
-        {EAT_INFO_SECTIONS.map((section) => (
+        {sections.map((section) => (
           <section key={section.title} className="flex flex-col gap-4">
-            <h2 className="eat-info-section-title">{section.title}</h2>
+            <h2 className={sectionTitleClassName}>{section.title}</h2>
 
             {section.body?.map((paragraph) => (
-              <p key={paragraph} className="eat-info-body">
+              <p key={paragraph} className={bodyClassName}>
                 {paragraph}
               </p>
             ))}
@@ -185,7 +198,7 @@ export function EatInfoScreen() {
             ))}
 
             {section.bullets ? (
-              <ul className="eat-info-body eat-info-list">
+              <ul className={listClassName}>
                 {section.bullets.map((item) => (
                   <li key={item}>{item}</li>
                 ))}

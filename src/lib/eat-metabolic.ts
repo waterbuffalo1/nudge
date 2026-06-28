@@ -3,12 +3,15 @@ import {
   addHours,
   getFillWindowHours,
   getMealWindows,
+  getPhaseClock,
+  isMealCycleStarted,
   roundToNearest15Minutes,
   type MealSize,
 } from "./eat-meal-timing";
 
 export const LIVER_CAP_GRAMS = 90;
 export const LIVER_FLOOR_GRAMS = 18;
+export const LIVER_DRAINABLE_CAP_GRAMS = LIVER_CAP_GRAMS - LIVER_FLOOR_GRAMS;
 export const LIVER_DRAIN_K = 0.12;
 export const AUTOPHAGY_HOURS = 24;
 export const FAT_BURN_GRAMS_PER_HOUR = 4;
@@ -68,7 +71,10 @@ export function getLatestMealAt(meals: LoggedMeal[], at: Date): LoggedMeal | nul
 
   for (const meal of meals) {
     const mealStart = roundToNearest15Minutes(new Date(meal.selectedAt));
-    if (mealStart.getTime() > at.getTime()) {
+    if (
+      mealStart.getTime() > at.getTime() &&
+      !isMealCycleStarted(mealStart, at)
+    ) {
       continue;
     }
 
@@ -94,7 +100,15 @@ export function isLatestMealInDigestionOrPancreas(
   }
 
   const windows = getMealWindows(new Date(latest.selectedAt), latest.mealSize);
-  return at.getTime() < windows.pancreasRampDownEnd.getTime();
+  const clock = getPhaseClock(at);
+  return (
+    clock.getTime() >= windows.digestionStart.getTime() &&
+    at.getTime() < windows.pancreasRampDownEnd.getTime()
+  );
+}
+
+export function getDrainableLiverGrams(liverGrams: number): number {
+  return Math.max(0, liverGrams - LIVER_FLOOR_GRAMS);
 }
 
 export function liverAfterDrainHours(
@@ -110,6 +124,14 @@ export function hoursToReachLiverFloor(fromGrams: number): number {
   }
 
   return -Math.log(LIVER_FLOOR_GRAMS / fromGrams) / LIVER_DRAIN_K;
+}
+
+export function hoursToDrainToLevel(fromGrams: number, toGrams: number): number {
+  if (fromGrams <= toGrams) {
+    return 0;
+  }
+
+  return -Math.log(toGrams / fromGrams) / LIVER_DRAIN_K;
 }
 
 function applyFill(
@@ -258,13 +280,13 @@ export function simulateMetabolicState(
     new Date(sortedMeals[0]!.selectedAt),
   );
 
-  if (now.getTime() < cycleStart.getTime()) {
+  if (!isMealCycleStarted(cycleStart, now)) {
     return null;
   }
 
   const eventTimes = getSimulationEventTimes(sortedMeals, now);
   let scratch: SimulationScratch = {
-    liverGrams: 0,
+    liverGrams: LIVER_FLOOR_GRAMS,
     fatDeltaGrams: 0,
     atAutophagyFloor: false,
     autophagyStartedAt: null,
@@ -272,7 +294,9 @@ export function simulateMetabolicState(
 
   for (let index = 0; index < eventTimes.length - 1; index += 1) {
     const t0 = new Date(eventTimes[index]!);
-    const t1 = new Date(eventTimes[index + 1]!);
+    const t1 = new Date(
+      Math.min(eventTimes[index + 1]!, now.getTime()),
+    );
 
     if (t1.getTime() <= t0.getTime()) {
       continue;
@@ -314,11 +338,6 @@ export function simulateMetabolicState(
     if (!scratch.atAutophagyFloor && scratch.liverGrams > LIVER_FLOOR_GRAMS) {
       scratch = processDrainSegment(scratch, t0, t1);
       continue;
-    }
-
-    if (!scratch.atAutophagyFloor && scratch.liverGrams <= LIVER_FLOOR_GRAMS) {
-      scratch.atAutophagyFloor = true;
-      scratch.autophagyStartedAt = scratch.autophagyStartedAt ?? t0;
     }
 
     if (scratch.atAutophagyFloor) {
@@ -368,4 +387,77 @@ export function formatFatStorageLabel(
     magnitude % 1 === 0 ? `${magnitude}` : magnitude.toFixed(1);
 
   return `${baselineGrams}g ${sign} ${formattedMagnitude}g`;
+}
+
+const LIVER_MOON_PHASES = [
+  { fillPercent: 25, emoji: "🌔" },
+  { fillPercent: 50, emoji: "🌓" },
+  { fillPercent: 75, emoji: "🌒" },
+  { fillPercent: 100, emoji: "🌑" },
+] as const;
+
+export function getLiverCapacityPercent(liverGrams: number): number {
+  return (getDrainableLiverGrams(liverGrams) / LIVER_DRAINABLE_CAP_GRAMS) * 100;
+}
+
+/** Total tank fill including the 18g reserve; used for moon display. */
+export function getLiverMoonFillPercent(liverGrams: number): number {
+  return (liverGrams / LIVER_CAP_GRAMS) * 100;
+}
+
+export function getMoonPhaseEmojiForLiverPercent(percent: number): string {
+  const clamped = Math.max(0, Math.min(100, percent));
+  let closest: (typeof LIVER_MOON_PHASES)[number] = LIVER_MOON_PHASES[0]!;
+  let minDistance = Infinity;
+
+  for (const phase of LIVER_MOON_PHASES) {
+    const distance = Math.abs(clamped - phase.fillPercent);
+    if (distance < minDistance) {
+      minDistance = distance;
+      closest = phase;
+    }
+  }
+
+  return closest.emoji;
+}
+
+/** Moon maps total tank fill to quarter/half/three-quarter/full dark: 25/50/75/100%. */
+export function getMoonPhaseEmojiForLiverGrams(liverGrams: number): string {
+  return getMoonPhaseEmojiForLiverPercent(getLiverMoonFillPercent(liverGrams));
+}
+
+/** During digestion/pancreas, show the projected fill peak; otherwise actual grams. */
+export function getLiverGramsForMoonDisplay(
+  meals: LoggedMeal[],
+  now: Date,
+  actualLiverGrams: number,
+): number {
+  if (!isLatestMealInDigestionOrPancreas(meals, now)) {
+    return actualLiverGrams;
+  }
+
+  let projectionMs = 0;
+  for (const meal of meals) {
+    const start = roundToNearest15Minutes(new Date(meal.selectedAt));
+    const fillEnd = addHours(start, getFillWindowHours(meal.mealSize)).getTime();
+    if (now.getTime() < fillEnd) {
+      projectionMs = Math.max(projectionMs, fillEnd - 60_000);
+    }
+  }
+
+  if (projectionMs <= now.getTime()) {
+    return actualLiverGrams;
+  }
+
+  return simulateMetabolicState(meals, new Date(projectionMs))?.liverGrams ?? actualLiverGrams;
+}
+
+export function getMoonPhaseEmojiForMeals(
+  meals: LoggedMeal[],
+  now: Date,
+  actualLiverGrams: number,
+): string {
+  return getMoonPhaseEmojiForLiverGrams(
+    getLiverGramsForMoonDisplay(meals, now, actualLiverGrams),
+  );
 }
