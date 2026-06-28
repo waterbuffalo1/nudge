@@ -1,24 +1,30 @@
 import { describe, expect, it } from "vitest";
 import {
+  addLoggedMeal,
   dateFromPickerValues,
   dateToPickerValues,
   formatFriendlyTime,
   formatRelativeTime,
   formatRelativeTimeRange,
   formatTimeRange,
-  getAutophagyStatusText,
+  getCombinedMealPhase,
+  getCumulativeFillGrams,
   getCurrentMealStatusRow,
   getDigestionStatusText,
   getEatHomeCardLines,
-  getEatingFromStorageStatusText,
+  getFillWindowHours,
   getMealPhase,
   getMealStatusRows,
   getMealWindows,
   getPancreasRampDownStatusText,
-  isMealActive,
+  hoursToReachLiverFloor,
+  isEatCycleActive,
+  liverAfterDrainHours,
+  LIVER_FLOOR_GRAMS,
   roundToNearest15Minutes,
-  shouldApplyNewMeal,
+  simulateMetabolicState,
 } from "./eat-meal";
+import { MEAL_LIVER_DEPOSIT_GRAMS } from "./eat-metabolic";
 
 describe("roundToNearest15Minutes", () => {
   it("rounds down to the nearest 15 minutes", () => {
@@ -41,25 +47,23 @@ describe("roundToNearest15Minutes", () => {
 });
 
 describe("eat meal windows", () => {
-  it("uses the full snack timeline", () => {
+  it("uses digestion and pancreas windows for a snack", () => {
     const selectedAt = new Date("2026-06-17T18:07:00-04:00");
     const windows = getMealWindows(selectedAt, "small snack");
 
     expect(windows.digestionStart).toEqual(new Date("2026-06-17T18:00:00-04:00"));
     expect(windows.digestionEnd).toEqual(new Date("2026-06-17T19:00:00-04:00"));
     expect(windows.pancreasRampDownEnd).toEqual(new Date("2026-06-17T20:00:00-04:00"));
-    expect(windows.eatingFromStorageEnd).toEqual(new Date("2026-06-18T02:00:00-04:00"));
-    expect(windows.autophagyEnd).toEqual(new Date("2026-06-19T02:00:00-04:00"));
+    expect(getFillWindowHours("small snack")).toBe(2);
+    expect(MEAL_LIVER_DEPOSIT_GRAMS["small snack"]).toBe(8);
   });
 
-  it("uses the full reasonable meal timeline", () => {
+  it("uses digestion and pancreas windows for a reasonable meal", () => {
     const selectedAt = new Date("2026-06-17T18:07:00-04:00");
     const windows = getMealWindows(selectedAt, "reasonable meal");
 
     expect(windows.digestionEnd).toEqual(new Date("2026-06-17T20:00:00-04:00"));
     expect(windows.pancreasRampDownEnd).toEqual(new Date("2026-06-17T22:00:00-04:00"));
-    expect(windows.eatingFromStorageEnd).toEqual(new Date("2026-06-18T08:00:00-04:00"));
-    expect(windows.autophagyEnd).toEqual(new Date("2026-06-19T08:00:00-04:00"));
   });
 
   it("formats friendly local times", () => {
@@ -83,21 +87,13 @@ describe("eat meal windows", () => {
     expect(formatFriendlyTime(time)).toMatch(/6:15pm/i);
   });
 
-  it("treats a meal as active until autophagy ends", () => {
-    const selectedAt = roundToNearest15Minutes(
-      new Date("2026-06-17T18:07:00-04:00"),
+  it("drains exponentially until the metabolic switch floor", () => {
+    expect(liverAfterDrainHours(90, 4)).toBeCloseTo(55.7, 1);
+    expect(hoursToReachLiverFloor(90)).toBeCloseTo(13.4, 1);
+    expect(liverAfterDrainHours(90, hoursToReachLiverFloor(90))).toBeCloseTo(
+      LIVER_FLOOR_GRAMS,
+      1,
     );
-    const lastMeal = {
-      mealSize: "reasonable meal" as const,
-      selectedAt: selectedAt.toISOString(),
-    };
-
-    expect(
-      isMealActive(lastMeal, new Date("2026-06-19T07:00:00-04:00")),
-    ).toBe(true);
-    expect(
-      isMealActive(lastMeal, new Date("2026-06-19T08:00:00-04:00")),
-    ).toBe(false);
   });
 
   it("uses until for the current phase and from for the others", () => {
@@ -107,8 +103,6 @@ describe("eat meal windows", () => {
     );
     const duringDigestion = new Date("2026-06-17T18:30:00-04:00");
     const duringPancreasRampDown = new Date("2026-06-17T21:00:00-04:00");
-    const duringEatingFromStorage = new Date("2026-06-17T23:00:00-04:00");
-    const duringAutophagy = new Date("2026-06-18T10:00:00-04:00");
 
     expect(getMealPhase(windows, duringDigestion)).toBe("digestion");
     expect(getDigestionStatusText(windows, duringDigestion)).toBe(
@@ -116,12 +110,6 @@ describe("eat meal windows", () => {
     );
     expect(getPancreasRampDownStatusText(windows, duringDigestion)).toBe(
       "pancreas will ramp down and we will approach our blood sugar baseline from 8-10pm.",
-    );
-    expect(getEatingFromStorageStatusText(windows, duringDigestion)).toBe(
-      "will snack on liver glycogen (nom nom nom) from 10pm tonight until 8am tomorrow.",
-    );
-    expect(getAutophagyStatusText(windows, duringDigestion)).toBe(
-      "autophagy. let's clean those streets! 🧹 from 8am tomorrow until 8am the day after that.",
     );
 
     expect(getMealPhase(windows, duringPancreasRampDown)).toBe(
@@ -134,22 +122,9 @@ describe("eat meal windows", () => {
       "pancreas is ramping down and we will approach our blood sugar baseline until 10pm tonight...",
     );
 
-    expect(getMealPhase(windows, duringEatingFromStorage)).toBe(
-      "eating-from-storage",
-    );
-    expect(getEatingFromStorageStatusText(windows, duringEatingFromStorage)).toBe(
-      "snacking on liver glycogen (nom nom nom) until 8am tomorrow...",
-    );
-
-    expect(getMealPhase(windows, duringAutophagy)).toBe("autophagy");
-    expect(getAutophagyStatusText(windows, duringAutophagy)).toBe(
-      "autophagy. cleaning crew is working! 🧹 until 8am tomorrow...",
-    );
-
     const statusRows = getMealStatusRows(windows, duringPancreasRampDown);
     expect(statusRows[0]?.isDone).toBe(true);
     expect(statusRows[1]?.isDone).toBe(false);
-    expect(statusRows[2]?.isDone).toBe(false);
 
     const currentStatus = getCurrentMealStatusRow(windows, duringPancreasRampDown);
     expect(currentStatus.text).toBe(
@@ -161,18 +136,19 @@ describe("eat meal windows", () => {
     const selectedAt = roundToNearest15Minutes(
       new Date("2026-06-17T18:07:00-04:00"),
     );
-    const lastMeal = {
-      mealSize: "reasonable meal" as const,
-      selectedAt: selectedAt.toISOString(),
-    };
+    const meals = [
+      {
+        mealSize: "reasonable meal" as const,
+        selectedAt: selectedAt.toISOString(),
+      },
+    ];
     const duringPancreasRampDown = new Date("2026-06-17T21:00:00-04:00");
-    const duringLiver = new Date("2026-06-17T23:00:00-04:00");
-    const duringAutophagy = new Date("2026-06-18T10:00:00-04:00");
     const duringDigestion = new Date("2026-06-17T18:30:00-04:00");
+    const duringLiver = new Date("2026-06-17T23:00:00-04:00");
 
     const originalWindow = globalThis.window;
     const storage = new Map<string, string>([
-      ["nudge-eat-last-meal", JSON.stringify(lastMeal)],
+      ["nudge-eat-meals", JSON.stringify(meals)],
     ]);
 
     Object.defineProperty(globalThis, "window", {
@@ -215,17 +191,6 @@ describe("eat meal windows", () => {
           italic: true,
         },
       ]);
-      expect(getEatHomeCardLines(duringAutophagy)).toEqual([
-        { leadingIcon: "🧹", text: "cleaning up ◡̈" },
-        {
-          leadingIcon: "🏃🏻‍♀️",
-          text: "great time to run!",
-          italic: true,
-        },
-      ]);
-      expect(
-        getEatHomeCardLines(new Date("2026-06-19T08:00:00-04:00")),
-      ).toBeNull();
     } finally {
       if (originalWindow) {
         Object.defineProperty(globalThis, "window", {
@@ -273,46 +238,146 @@ describe("eat meal windows", () => {
     });
   });
 
-  it("upgrades the timeline when a larger meal is logged during an active one", () => {
-    const feastAt = new Date("2026-06-17T15:00:00-04:00");
-    const activeFeast = {
-      mealSize: "feast" as const,
-      selectedAt: feastAt.toISOString(),
-    };
-    const oneHourLater = new Date("2026-06-17T16:00:00-04:00");
+  it("overlaps liver across meals and keeps latest digestion and pancreas", () => {
+    const feastAt = new Date("2026-06-17T08:00:00-04:00");
+    const snackAt = new Date("2026-06-17T12:00:00-04:00");
+    const meals = [
+      { mealSize: "feast" as const, selectedAt: feastAt.toISOString() },
+      { mealSize: "small snack" as const, selectedAt: snackAt.toISOString() },
+    ];
 
     expect(
-      shouldApplyNewMeal(activeFeast, "small snack", oneHourLater),
-    ).toBe(false);
+      getCombinedMealPhase(meals, new Date("2026-06-17T12:30:00-04:00")),
+    ).toBe("digestion");
     expect(
-      shouldApplyNewMeal(activeFeast, "reasonable meal", oneHourLater),
-    ).toBe(false);
-    expect(shouldApplyNewMeal(activeFeast, "feast", oneHourLater)).toBe(false);
-
-    const snackAt = new Date("2026-06-17T15:00:00-04:00");
-    const activeSnack = {
-      mealSize: "small snack" as const,
-      selectedAt: snackAt.toISOString(),
-    };
-
+      getCombinedMealPhase(meals, new Date("2026-06-17T13:30:00-04:00")),
+    ).toBe("pancreas-ramp-down");
     expect(
-      shouldApplyNewMeal(activeSnack, "reasonable meal", oneHourLater),
-    ).toBe(true);
-    expect(shouldApplyNewMeal(activeSnack, "feast", oneHourLater)).toBe(true);
-    expect(
-      shouldApplyNewMeal(activeSnack, "small snack", oneHourLater),
-    ).toBe(false);
+      getCombinedMealPhase(meals, new Date("2026-06-17T15:00:00-04:00")),
+    ).toBe("eating-from-storage");
   });
 
-  it("always applies a meal when nothing is active", () => {
+  it("starts autophagy at the liver floor and ends the cycle after 24 hours", () => {
+    const feastAt = new Date("2026-06-17T08:00:00-04:00");
+    const meals = [{ mealSize: "feast" as const, selectedAt: feastAt.toISOString() }];
+    const floorTime = new Date("2026-06-18T03:30:00-04:00");
+    const duringAutophagy = new Date("2026-06-18T08:00:00-04:00");
+    const afterCycle = new Date("2026-06-19T04:00:00-04:00");
+
+    const atFloor = simulateMetabolicState(meals, floorTime);
+    expect(atFloor?.currentPhase).toBe("autophagy");
+    expect(atFloor?.liverGrams).toBeCloseTo(LIVER_FLOOR_GRAMS, 1);
+
+    const during = simulateMetabolicState(meals, duringAutophagy);
+    expect(during?.currentPhase).toBe("autophagy");
+    expect(during?.fatDeltaGrams).toBeLessThan(0);
+
+    expect(isEatCycleActive(meals, afterCycle)).toBe(false);
+  });
+
+  it("always appends a meal during an active cycle", () => {
+    const feastAt = new Date("2026-06-17T08:00:00-04:00");
+    const meals = [
+      { mealSize: "feast" as const, selectedAt: feastAt.toISOString() },
+    ];
+    const oneHourLater = new Date("2026-06-17T09:00:00-04:00");
+
+    const originalWindow = globalThis.window;
+    const storage = new Map<string, string>([
+      ["nudge-eat-meals", JSON.stringify(meals)],
+    ]);
+
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        localStorage: {
+          getItem: (key: string) => storage.get(key) ?? null,
+          setItem: (key: string, value: string) => {
+            storage.set(key, value);
+          },
+          removeItem: (key: string) => {
+            storage.delete(key);
+          },
+        },
+      },
+    });
+
+    try {
+      const snackAt = new Date("2026-06-17T12:00:00-04:00");
+      const updated = addLoggedMeal("small snack", snackAt, oneHourLater);
+
+      expect(updated).toHaveLength(2);
+      expect(updated[1]?.mealSize).toBe("small snack");
+    } finally {
+      if (originalWindow) {
+        Object.defineProperty(globalThis, "window", {
+          configurable: true,
+          value: originalWindow,
+        });
+      } else {
+        Reflect.deleteProperty(globalThis, "window");
+      }
+    }
+  });
+
+  it("starts a fresh cycle when the previous one has expired", () => {
     const expiredSnack = {
       mealSize: "small snack" as const,
-      selectedAt: new Date("2026-06-17T12:00:00-04:00").toISOString(),
+      selectedAt: new Date("2026-06-10T12:00:00-04:00").toISOString(),
     };
     const later = new Date("2026-06-18T21:00:00-04:00");
 
-    expect(isMealActive(expiredSnack, later)).toBe(false);
-    expect(shouldApplyNewMeal(expiredSnack, "small snack", later)).toBe(true);
-    expect(shouldApplyNewMeal(null, "reasonable meal", later)).toBe(true);
+    expect(isEatCycleActive([expiredSnack], later)).toBe(false);
+
+    const originalWindow = globalThis.window;
+    const storage = new Map<string, string>([
+      ["nudge-eat-meals", JSON.stringify([expiredSnack])],
+    ]);
+
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        localStorage: {
+          getItem: (key: string) => storage.get(key) ?? null,
+          setItem: (key: string, value: string) => {
+            storage.set(key, value);
+          },
+          removeItem: (key: string) => {
+            storage.delete(key);
+          },
+        },
+      },
+    });
+
+    try {
+      const newMealAt = new Date("2026-06-18T21:00:00-04:00");
+      const updated = addLoggedMeal("reasonable meal", newMealAt, later);
+
+      expect(updated).toHaveLength(1);
+      expect(updated[0]?.mealSize).toBe("reasonable meal");
+    } finally {
+      if (originalWindow) {
+        Object.defineProperty(globalThis, "window", {
+          configurable: true,
+          value: originalWindow,
+        });
+      } else {
+        Reflect.deleteProperty(globalThis, "window");
+      }
+    }
+  });
+
+  it("caps liver fill and sends overflow to fat storage", () => {
+    const feastAt = new Date("2026-06-17T08:00:00-04:00");
+    const snackAt = new Date("2026-06-17T12:00:00-04:00");
+    const meals = [
+      { mealSize: "feast" as const, selectedAt: feastAt.toISOString() },
+      { mealSize: "small snack" as const, selectedAt: snackAt.toISOString() },
+    ];
+    const afterSnackFill = new Date("2026-06-17T14:00:00-04:00");
+
+    const state = simulateMetabolicState(meals, afterSnackFill);
+    expect(state?.liverGrams).toBeLessThanOrEqual(90);
+    expect(getCumulativeFillGrams(meals[1]!, afterSnackFill)).toBe(8);
   });
 });

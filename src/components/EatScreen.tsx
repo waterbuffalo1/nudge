@@ -5,18 +5,21 @@ import { useEffect, useState } from "react";
 import { TimeRoller } from "@/components/TimeRoller";
 import { EatInfoScreen } from "@/components/EatInfoScreen";
 import {
-  clearLastMeal,
+  addLoggedMeal,
+  clearLoggedMeals,
   dateFromPickerValues,
   dateToPickerValues,
   formatFriendlyTime,
-  getMealStatusRows,
+  getCombinedMealStatusRows,
+  getFatStorageStatusText,
+  getCombinedEatState,
+  getLatestLoggedMeal,
   getMealWindows,
-  isMealActive,
-  logMeal,
-  readLastMeal,
+  isEatCycleActive,
+  readLoggedMeals,
   roundToNearest15Minutes,
-  saveLastMeal,
-  type LastMeal,
+  updateLatestLoggedMeal,
+  type LoggedMeal,
   type MealSize,
   type MealTimePickerValues,
   type PickerMeridiem,
@@ -102,13 +105,13 @@ function InfoIcon() {
 }
 
 function EatHeader({
-  activeMeal,
+  cycleActive,
   infoOpen,
   onEdit,
   onReset,
   onInfo,
 }: {
-  activeMeal: LastMeal | null;
+  cycleActive: boolean;
   infoOpen: boolean;
   onEdit: () => void;
   onReset: () => void;
@@ -138,7 +141,7 @@ function EatHeader({
           <EditIcon />
           edit
         </button>
-        {activeMeal ? (
+        {cycleActive ? (
           <button
             type="button"
             className={`${navLinkClassName} flex items-center gap-1.5`}
@@ -174,11 +177,12 @@ const statusClassName =
 const statusDetailRowClassName =
   "text-left text-lg font-medium tracking-tight -ml-2 flex items-baseline gap-2";
 
-function getEditDefaults(lastMeal: LastMeal | null, now: Date) {
-  if (lastMeal) {
+function getEditDefaults(meals: LoggedMeal[], now: Date) {
+  if (meals.length > 0) {
+    const latestMeal = getLatestLoggedMeal(meals);
     return {
-      mealSize: lastMeal.mealSize,
-      ...dateToPickerValues(new Date(lastMeal.selectedAt)),
+      mealSize: latestMeal.mealSize,
+      ...dateToPickerValues(new Date(latestMeal.selectedAt)),
     };
   }
 
@@ -247,17 +251,19 @@ function EatPhaseText({ text, isDone }: { text: string; isDone: boolean }) {
   );
 }
 
-function EatStatus({ lastMeal, now }: { lastMeal: LastMeal; now: Date }) {
+function EatStatus({ meals, now }: { meals: LoggedMeal[]; now: Date }) {
+  const latestMeal = getLatestLoggedMeal(meals);
   const windows = getMealWindows(
-    new Date(lastMeal.selectedAt),
-    lastMeal.mealSize,
+    new Date(latestMeal.selectedAt),
+    latestMeal.mealSize,
   );
-  const statusRows = getMealStatusRows(windows, now);
+  const state = getCombinedEatState(meals, now);
+  const statusRows = getCombinedMealStatusRows(meals, now);
 
   return (
     <div className="flex w-full flex-col">
       <p className={`${statusClassName} mb-10`}>
-        last had a {lastMeal.mealSize} at{" "}
+        last had a {latestMeal.mealSize} at{" "}
         {formatFriendlyTime(windows.digestionStart)}
       </p>
       <div className="flex flex-col gap-3 pb-2">
@@ -275,6 +281,11 @@ function EatStatus({ lastMeal, now }: { lastMeal: LastMeal; now: Date }) {
           </p>
         ))}
       </div>
+      {state ? (
+        <p className={`${statusDetailRowClassName} mt-4 text-muted`}>
+          {getFatStorageStatusText(state)}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -343,7 +354,7 @@ function EatEditScreen({
 
 export function EatScreen() {
   const [step, setStep] = useState<EatStep>("ask");
-  const [lastMeal, setLastMeal] = useState<LastMeal | null>(null);
+  const [meals, setMeals] = useState<LoggedMeal[]>([]);
   const [now, setNow] = useState(() => new Date());
   const [editMealSize, setEditMealSize] = useState<MealSize>("reasonable meal");
   const [editPicker, setEditPicker] = useState<MealTimePickerValues>(() =>
@@ -351,17 +362,17 @@ export function EatScreen() {
   );
 
   useEffect(() => {
-    const stored = readLastMeal();
+    const stored = readLoggedMeals();
     const currentTime = new Date();
 
-    if (stored && isMealActive(stored, currentTime)) {
-      setLastMeal(stored);
+    if (stored.length > 0 && isEatCycleActive(stored, currentTime)) {
+      setMeals(stored);
       setNow(currentTime);
       return;
     }
 
-    if (stored) {
-      clearLastMeal();
+    if (stored.length > 0) {
+      clearLoggedMeals();
     }
   }, []);
 
@@ -389,25 +400,24 @@ export function EatScreen() {
     return () => window.clearInterval(intervalId);
   }, [step]);
 
-  const activeMeal =
-    lastMeal && isMealActive(lastMeal, now) ? lastMeal : null;
+  const cycleActive = isEatCycleActive(meals, now);
 
   useEffect(() => {
-    if (lastMeal && !isMealActive(lastMeal, now)) {
-      clearLastMeal();
-      setLastMeal(null);
+    if (meals.length > 0 && !isEatCycleActive(meals, now)) {
+      clearLoggedMeals();
+      setMeals([]);
     }
-  }, [lastMeal, now]);
+  }, [meals, now]);
 
   function handleReset() {
-    clearLastMeal();
-    setLastMeal(null);
+    clearLoggedMeals();
+    setMeals([]);
     setStep("ask");
     setNow(new Date());
   }
 
   function handleEditOpen() {
-    const defaults = getEditDefaults(lastMeal, new Date());
+    const defaults = getEditDefaults(meals, new Date());
     setEditMealSize(defaults.mealSize);
     setEditPicker({
       hour12: defaults.hour12,
@@ -418,20 +428,21 @@ export function EatScreen() {
   }
 
   function handleEditSubmit() {
-    const baseDate = lastMeal ? new Date(lastMeal.selectedAt) : new Date();
+    const latestMeal = meals.length > 0 ? getLatestLoggedMeal(meals) : null;
+    const baseDate = latestMeal ? new Date(latestMeal.selectedAt) : new Date();
     const selectedAt = dateFromPickerValues({
       ...editPicker,
       baseDate,
     });
-    const record = saveLastMeal(editMealSize, selectedAt);
-    setLastMeal(record);
+    const updated = updateLatestLoggedMeal(editMealSize, selectedAt);
+    setMeals(updated);
     setNow(new Date());
     setStep("ask");
   }
 
   function handleMealSelect(mealSize: MealSize) {
-    const result = logMeal(mealSize, new Date(), lastMeal, now);
-    setLastMeal(result.meal);
+    const updated = addLoggedMeal(mealSize, new Date(), now);
+    setMeals(updated);
     setNow(new Date());
     setStep("ask");
   }
@@ -442,7 +453,7 @@ export function EatScreen() {
 
   const header = (
     <EatHeader
-      activeMeal={activeMeal}
+      cycleActive={cycleActive}
       infoOpen={step === "info"}
       onEdit={handleEditOpen}
       onReset={handleReset}
@@ -523,10 +534,10 @@ export function EatScreen() {
     <>
       {header}
       <div className="relative flex min-h-[calc(100dvh-6rem)] flex-1 flex-col px-5">
-        {activeMeal ? (
+        {cycleActive ? (
           <div className="flex min-h-[calc(100dvh-6rem)] flex-1 flex-col pb-[max(2.5rem,env(safe-area-inset-bottom))]">
             <div className="shrink-0 pt-[5dvh]">
-              <EatStatus lastMeal={activeMeal} now={now} />
+              <EatStatus meals={meals} now={now} />
             </div>
             <div className="mt-auto flex shrink-0 flex-col items-center gap-4 pt-12">
               <p className={headerClassName}>still hungry?</p>

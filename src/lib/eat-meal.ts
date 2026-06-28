@@ -1,84 +1,51 @@
-export const MEAL_SIZES = {
-  "small snack": {
-    digestionHours: 1,
-    pancreasRampDownHours: 1,
-    eatingFromStorageHours: 6,
-    autophagyHours: 24,
-  },
-  "reasonable meal": {
-    digestionHours: 2,
-    pancreasRampDownHours: 2,
-    eatingFromStorageHours: 10,
-    autophagyHours: 24,
-  },
-  feast: {
-    digestionHours: 3,
-    pancreasRampDownHours: 3,
-    eatingFromStorageHours: 14,
-    autophagyHours: 24,
-  },
-} as const;
+import {
+  formatFatStorageLabel,
+  hoursToReachLiverFloor,
+  simulateMetabolicState,
+  FAT_STORAGE_BASELINE_GRAMS,
+  LIVER_FLOOR_GRAMS,
+  type MetabolicState,
+} from "./eat-metabolic";
+import {
+  addHours,
+  getMealWindows,
+  roundToNearest15Minutes,
+  type LoggedMeal,
+  type MealPhase,
+  type MealSize,
+  type MealWindows,
+  MEAL_SIZES,
+} from "./eat-meal-timing";
 
-export type MealSize = keyof typeof MEAL_SIZES;
+export {
+  MEAL_SIZES,
+  getMealWindows,
+  roundToNearest15Minutes,
+  type LoggedMeal,
+  type MealPhase,
+  type MealSize,
+  type MealWindows,
+} from "./eat-meal-timing";
+export {
+  formatFatStorageLabel,
+  getCumulativeFillGrams,
+  hoursToReachLiverFloor,
+  liverAfterDrainHours,
+  simulateMetabolicState,
+  LIVER_CAP_GRAMS,
+  LIVER_FLOOR_GRAMS,
+  FAT_STORAGE_BASELINE_GRAMS,
+  type MetabolicState,
+} from "./eat-metabolic";
+export { getFillWindowHours } from "./eat-meal-timing";
 
-export const MEAL_SIZE_RANK: Record<MealSize, number> = {
-  "small snack": 1,
-  "reasonable meal": 2,
-  feast: 3,
-};
-
-export function shouldApplyNewMeal(
-  currentMeal: LastMeal | null,
-  newMealSize: MealSize,
-  now: Date,
-): boolean {
-  if (!currentMeal || !isMealActive(currentMeal, now)) {
-    return true;
-  }
-
-  return MEAL_SIZE_RANK[newMealSize] > MEAL_SIZE_RANK[currentMeal.mealSize];
-}
-
-export type LogMealResult = {
-  applied: boolean;
-  meal: LastMeal;
-};
-
-export function logMeal(
-  mealSize: MealSize,
-  selectedAt: Date,
-  currentMeal: LastMeal | null,
-  now: Date,
-): LogMealResult {
-  if (!shouldApplyNewMeal(currentMeal, mealSize, now)) {
-    return { applied: false, meal: currentMeal! };
-  }
-
-  return { applied: true, meal: saveLastMeal(mealSize, selectedAt) };
-}
-
+export const EAT_MEALS_KEY = "nudge-eat-meals";
 export const EAT_LAST_MEAL_KEY = "nudge-eat-last-meal";
+export const EAT_UPDATED_EVENT = "nudge-eat-updated";
 
-export type LastMeal = {
-  mealSize: MealSize;
-  selectedAt: string;
-};
-
-export type MealPhase =
-  | "digestion"
-  | "pancreas-ramp-down"
-  | "eating-from-storage"
-  | "autophagy";
-
-export type MealWindows = {
-  digestionStart: Date;
-  digestionEnd: Date;
-  pancreasRampDownStart: Date;
-  pancreasRampDownEnd: Date;
-  eatingFromStorageStart: Date;
-  eatingFromStorageEnd: Date;
-  autophagyStart: Date;
-  autophagyEnd: Date;
+export type LastMeal = LoggedMeal;
+export type CombinedEatState = MetabolicState & {
+  latestWindows: MealWindows;
 };
 
 const MEAL_PHASE_ORDER: MealPhase[] = [
@@ -87,19 +54,6 @@ const MEAL_PHASE_ORDER: MealPhase[] = [
   "eating-from-storage",
   "autophagy",
 ];
-
-export function roundToNearest15Minutes(date: Date): Date {
-  const rounded = new Date(date);
-  const roundedMinutes = Math.round(rounded.getMinutes() / 15) * 15;
-
-  if (roundedMinutes === 60) {
-    rounded.setHours(rounded.getHours() + 1, 0, 0, 0);
-  } else {
-    rounded.setMinutes(roundedMinutes, 0, 0);
-  }
-
-  return rounded;
-}
 
 export const PICKER_MINUTES = [0, 15, 30, 45] as const;
 export const PICKER_HOURS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
@@ -267,58 +221,33 @@ export function formatRelativeTimeRange(
   return `${startPart} until ${endPart}`;
 }
 
-function addHours(date: Date, hours: number): Date {
-  return new Date(date.getTime() + hours * 60 * 60 * 1000);
-}
-
-export function getMealWindows(selectedAt: Date, mealSize: MealSize): MealWindows {
-  const {
-    digestionHours,
-    pancreasRampDownHours,
-    eatingFromStorageHours,
-    autophagyHours,
-  } = MEAL_SIZES[mealSize];
-  const digestionStart = roundToNearest15Minutes(selectedAt);
-  const digestionEnd = addHours(digestionStart, digestionHours);
-  const pancreasRampDownStart = digestionEnd;
-  const pancreasRampDownEnd = addHours(
-    pancreasRampDownStart,
-    pancreasRampDownHours,
-  );
-  const eatingFromStorageStart = pancreasRampDownEnd;
-  const eatingFromStorageEnd = addHours(
-    eatingFromStorageStart,
-    eatingFromStorageHours,
-  );
-  const autophagyStart = eatingFromStorageEnd;
-  const autophagyEnd = addHours(autophagyStart, autophagyHours);
-
-  return {
-    digestionStart,
-    digestionEnd,
-    pancreasRampDownStart,
-    pancreasRampDownEnd,
-    eatingFromStorageStart,
-    eatingFromStorageEnd,
-    autophagyStart,
-    autophagyEnd,
-  };
-}
-
-export function getMealPhase(windows: MealWindows, now: Date): MealPhase {
-  if (now < windows.digestionEnd) {
+function getLatestMealPhase(
+  windows: MealWindows,
+  now: Date,
+): "digestion" | "pancreas-ramp-down" | "past-pancreas" {
+  if (now.getTime() < windows.digestionEnd.getTime()) {
     return "digestion";
   }
 
-  if (now < windows.pancreasRampDownEnd) {
+  if (now.getTime() < windows.pancreasRampDownEnd.getTime()) {
     return "pancreas-ramp-down";
   }
 
-  if (now < windows.eatingFromStorageEnd) {
-    return "eating-from-storage";
+  return "past-pancreas";
+}
+
+export function getMealPhase(windows: MealWindows, now: Date): MealPhase {
+  const latestPhase = getLatestMealPhase(windows, now);
+
+  if (latestPhase === "digestion") {
+    return "digestion";
   }
 
-  return "autophagy";
+  if (latestPhase === "pancreas-ramp-down") {
+    return "pancreas-ramp-down";
+  }
+
+  return "eating-from-storage";
 }
 
 type PhaseRelation = "past" | "current" | "future";
@@ -341,7 +270,11 @@ function getPhaseRelation(
   return "current";
 }
 
-function getPhaseRange(phase: MealPhase, windows: MealWindows): {
+function getPhaseRange(
+  phase: MealPhase,
+  windows: MealWindows,
+  state?: CombinedEatState,
+): {
   start: Date;
   end: Date;
 } {
@@ -355,11 +288,14 @@ function getPhaseRange(phase: MealPhase, windows: MealWindows): {
       };
     case "eating-from-storage":
       return {
-        start: windows.eatingFromStorageStart,
-        end: windows.eatingFromStorageEnd,
+        start: windows.pancreasRampDownEnd,
+        end: state?.autophagyStartedAt ?? windows.pancreasRampDownEnd,
       };
     case "autophagy":
-      return { start: windows.autophagyStart, end: windows.autophagyEnd };
+      return {
+        start: state?.autophagyStartedAt ?? windows.pancreasRampDownEnd,
+        end: state?.autophagyEnd ?? windows.pancreasRampDownEnd,
+      };
   }
 }
 
@@ -367,14 +303,16 @@ function getPhaseStatusText(
   phase: MealPhase,
   windows: MealWindows,
   now: Date,
+  currentPhase: MealPhase,
   copy: {
     future: (range: string) => string;
     current: (until: string) => string;
     past: (range: string) => string;
   },
+  state?: CombinedEatState,
 ): string {
-  const relation = getPhaseRelation(phase, getMealPhase(windows, now));
-  const { start, end } = getPhaseRange(phase, windows);
+  const relation = getPhaseRelation(phase, currentPhase);
+  const { start, end } = getPhaseRange(phase, windows, state);
 
   if (relation === "current") {
     return copy.current(formatRelativeTime(end, now));
@@ -392,8 +330,9 @@ function getPhaseStatusText(
 export function getDigestionStatusText(
   windows: MealWindows,
   now: Date,
+  currentPhase: MealPhase = getMealPhase(windows, now),
 ): string {
-  return getPhaseStatusText("digestion", windows, now, {
+  return getPhaseStatusText("digestion", windows, now, currentPhase, {
     future: (range) => `body will process food from ${range}.`,
     current: (until) => `body is processing food until ${until}...`,
     past: (range) => `body processed food from ${range}.`,
@@ -403,8 +342,9 @@ export function getDigestionStatusText(
 export function getPancreasRampDownStatusText(
   windows: MealWindows,
   now: Date,
+  currentPhase: MealPhase = getMealPhase(windows, now),
 ): string {
-  return getPhaseStatusText("pancreas-ramp-down", windows, now, {
+  return getPhaseStatusText("pancreas-ramp-down", windows, now, currentPhase, {
     future: (range) =>
       `pancreas will ramp down and we will approach our blood sugar baseline from ${range}.`,
     current: (until) =>
@@ -414,32 +354,59 @@ export function getPancreasRampDownStatusText(
   });
 }
 
-export function getEatingFromStorageStatusText(
-  windows: MealWindows,
-  now: Date,
-): string {
-  return getPhaseStatusText("eating-from-storage", windows, now, {
-    future: (range) =>
-      `will snack on liver glycogen (nom nom nom) from ${range}.`,
-    current: (until) =>
-      `snacking on liver glycogen (nom nom nom) until ${until}...`,
-    past: (range) =>
-      `snacked on liver glycogen (nom nom nom) from ${range}.`,
-  });
+function formatGrams(grams: number): string {
+  const rounded = Math.round(grams * 10) / 10;
+  return rounded % 1 === 0 ? `${rounded}` : rounded.toFixed(1);
 }
 
-export function getAutophagyStatusText(
-  windows: MealWindows,
+export function getLiverTankStatusText(
+  state: CombinedEatState,
   now: Date,
 ): string {
-  return getPhaseStatusText("autophagy", windows, now, {
-    future: (range) =>
-      `autophagy. let's clean those streets! 🧹 from ${range}.`,
-    current: (until) =>
-      `autophagy. cleaning crew is working! 🧹 until ${until}...`,
-    past: (range) =>
-      `autophagy. cleaned those streets! 🧹 from ${range}.`,
-  });
+  const relation = getPhaseRelation("eating-from-storage", state.currentPhase);
+
+  if (relation === "past") {
+    return `liver reached the metabolic switch zone at ${formatGrams(LIVER_FLOOR_GRAMS)}g.`;
+  }
+
+  if (relation === "future") {
+    return `liver will drain toward the metabolic switch zone (~${formatGrams(LIVER_FLOOR_GRAMS)}g)...`;
+  }
+
+  if (state.liverGrams <= LIVER_FLOOR_GRAMS) {
+    return `liver at metabolic switch zone (${formatGrams(state.liverGrams)}g)...`;
+  }
+
+  const switchAt = addHours(now, hoursToReachLiverFloor(state.liverGrams));
+  return `liver pantry at ${formatGrams(state.liverGrams)}g... draining to switch zone until ${formatRelativeTime(switchAt, now)}...`;
+}
+
+export function getAutophagyTankStatusText(
+  state: CombinedEatState,
+  now: Date,
+): string {
+  const relation = getPhaseRelation("autophagy", state.currentPhase);
+  const fatLabel = formatFatStorageLabel(
+    FAT_STORAGE_BASELINE_GRAMS,
+    state.fatDeltaGrams,
+  );
+
+  if (relation === "past") {
+    return `autophagy finished. fat storage ${fatLabel}.`;
+  }
+
+  if (relation === "future") {
+    return `autophagy will start at the metabolic switch zone. fat storage ${fatLabel}.`;
+  }
+
+  const until = state.autophagyEnd
+    ? formatRelativeTime(state.autophagyEnd, now)
+    : "soon";
+  return `autophagy. cleaning crew is working! 🧹 until ${until}... fat storage ${fatLabel}.`;
+}
+
+export function getFatStorageStatusText(state: CombinedEatState): string {
+  return `fat storage: ${formatFatStorageLabel(FAT_STORAGE_BASELINE_GRAMS, state.fatDeltaGrams)}`;
 }
 
 export type MealStatusRow = {
@@ -467,18 +434,18 @@ export function getMealStatusRows(
   }
 
   return [
-    row("digestion", "⚙️", getDigestionStatusText(windows, now)),
+    row("digestion", "⚙️", getDigestionStatusText(windows, now, currentPhase)),
     row(
       "pancreas-ramp-down",
       "🫁",
-      getPancreasRampDownStatusText(windows, now),
+      getPancreasRampDownStatusText(windows, now, currentPhase),
     ),
     row(
       "eating-from-storage",
       "🍯",
-      getEatingFromStorageStatusText(windows, now),
+      "liver will drain after pancreas finishes...",
     ),
-    row("autophagy", "♻️", getAutophagyStatusText(windows, now)),
+    row("autophagy", "♻️", "autophagy starts at the metabolic switch zone..."),
   ];
 }
 
@@ -532,55 +499,201 @@ const EAT_HOME_LINES_BY_PHASE: Record<MealPhase, EatHomeCardLine[]> = {
   ],
 };
 
-export function getEatHomeCardLines(now: Date): EatHomeCardLine[] | null {
-  const lastMeal = readLastMeal();
-  if (!lastMeal || !isMealActive(lastMeal, now)) {
+export function getCombinedEatState(
+  meals: LoggedMeal[],
+  now: Date,
+): CombinedEatState | null {
+  const state = simulateMetabolicState(meals, now);
+  if (!state) {
     return null;
   }
 
-  const windows = getMealWindows(new Date(lastMeal.selectedAt), lastMeal.mealSize);
-  return EAT_HOME_LINES_BY_PHASE[getMealPhase(windows, now)];
-}
-
-export function isMealActive(lastMeal: LastMeal, now: Date): boolean {
-  const windows = getMealWindows(new Date(lastMeal.selectedAt), lastMeal.mealSize);
-  return now < windows.autophagyEnd;
-}
-
-export function clearLastMeal(): void {
-  if (typeof window !== "undefined") {
-    window.localStorage.removeItem(EAT_LAST_MEAL_KEY);
-  }
-}
-
-export function readLastMeal(): LastMeal | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const raw = window.localStorage.getItem(EAT_LAST_MEAL_KEY);
-  if (!raw) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as { mealSize: string; selectedAt: string };
-    const mealSize = parsed.mealSize === "feast!" ? "feast" : parsed.mealSize;
-    if (!(mealSize in MEAL_SIZES) || !parsed.selectedAt) {
-      return null;
-    }
-    return { mealSize: mealSize as MealSize, selectedAt: parsed.selectedAt };
-  } catch {
-    return null;
-  }
-}
-
-export function saveLastMeal(mealSize: MealSize, selectedAt: Date): LastMeal {
-  const roundedAt = roundToNearest15Minutes(selectedAt);
-  const record: LastMeal = {
-    mealSize,
-    selectedAt: roundedAt.toISOString(),
+  return {
+    ...state,
+    latestWindows: getMealWindows(
+      new Date(state.latestMeal.selectedAt),
+      state.latestMeal.mealSize,
+    ),
   };
-  window.localStorage.setItem(EAT_LAST_MEAL_KEY, JSON.stringify(record));
-  return record;
+}
+
+export function getCombinedMealPhase(
+  meals: LoggedMeal[],
+  now: Date,
+): MealPhase | null {
+  return getCombinedEatState(meals, now)?.currentPhase ?? null;
+}
+
+export function getCombinedMealStatusRows(
+  meals: LoggedMeal[],
+  now: Date,
+): MealStatusRow[] {
+  const state = getCombinedEatState(meals, now);
+  if (!state) {
+    return [];
+  }
+
+  const { latestWindows, currentPhase } = state;
+
+  function row(
+    phase: MealPhase,
+    icon: string,
+    text: string,
+  ): MealStatusRow {
+    return {
+      icon,
+      text,
+      isDone: getPhaseRelation(phase, currentPhase) === "past",
+    };
+  }
+
+  return [
+    row("digestion", "⚙️", getDigestionStatusText(latestWindows, now, currentPhase)),
+    row(
+      "pancreas-ramp-down",
+      "🫁",
+      getPancreasRampDownStatusText(latestWindows, now, currentPhase),
+    ),
+    row("eating-from-storage", "🍯", getLiverTankStatusText(state, now)),
+    row("autophagy", "♻️", getAutophagyTankStatusText(state, now)),
+  ];
+}
+
+export function getEatHomeCardLines(now: Date): EatHomeCardLine[] | null {
+  const meals = readLoggedMeals();
+  const state = getCombinedEatState(meals, now);
+  if (!state) {
+    return null;
+  }
+
+  return EAT_HOME_LINES_BY_PHASE[state.currentPhase];
+}
+
+export function isEatCycleActive(meals: LoggedMeal[], now: Date): boolean {
+  return getCombinedEatState(meals, now) !== null;
+}
+
+function parseLoggedMeal(raw: unknown): LoggedMeal | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const parsed = raw as { mealSize: string; selectedAt: string };
+  const mealSize = parsed.mealSize === "feast!" ? "feast" : parsed.mealSize;
+  if (!(mealSize in MEAL_SIZES) || !parsed.selectedAt) {
+    return null;
+  }
+
+  return { mealSize: mealSize as MealSize, selectedAt: parsed.selectedAt };
+}
+
+export function getLatestLoggedMeal(meals: LoggedMeal[]): LoggedMeal {
+  return meals.reduce((latest, meal) =>
+    new Date(meal.selectedAt) > new Date(latest.selectedAt) ? meal : latest,
+  );
+}
+
+export function readLoggedMeals(): LoggedMeal[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const raw = window.localStorage.getItem(EAT_MEALS_KEY);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as unknown[];
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map(parseLoggedMeal)
+          .filter((meal): meal is LoggedMeal => meal !== null);
+      }
+    } catch {
+      // fall through to legacy migration
+    }
+  }
+
+  const legacyRaw = window.localStorage.getItem(EAT_LAST_MEAL_KEY);
+  if (legacyRaw) {
+    try {
+      const legacyMeal = parseLoggedMeal(JSON.parse(legacyRaw));
+      window.localStorage.removeItem(EAT_LAST_MEAL_KEY);
+      if (legacyMeal) {
+        writeLoggedMeals([legacyMeal]);
+        return [legacyMeal];
+      }
+    } catch {
+      window.localStorage.removeItem(EAT_LAST_MEAL_KEY);
+    }
+  }
+
+  return [];
+}
+
+function notifyEatStorageChanged(): void {
+  if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+    window.dispatchEvent(new Event(EAT_UPDATED_EVENT));
+  }
+}
+
+export function writeLoggedMeals(meals: LoggedMeal[]): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (meals.length === 0) {
+    clearLoggedMeals();
+    return;
+  }
+
+  window.localStorage.setItem(EAT_MEALS_KEY, JSON.stringify(meals));
+  notifyEatStorageChanged();
+}
+
+export function clearLoggedMeals(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.removeItem(EAT_MEALS_KEY);
+  window.localStorage.removeItem(EAT_LAST_MEAL_KEY);
+  notifyEatStorageChanged();
+}
+
+export function addLoggedMeal(
+  mealSize: MealSize,
+  selectedAt: Date,
+  now: Date,
+): LoggedMeal[] {
+  const meals = readLoggedMeals();
+  const record: LoggedMeal = {
+    mealSize,
+    selectedAt: roundToNearest15Minutes(selectedAt).toISOString(),
+  };
+  const activeMeals = isEatCycleActive(meals, now) ? meals : [];
+  const updated = [...activeMeals, record];
+  writeLoggedMeals(updated);
+  return updated;
+}
+
+export function updateLatestLoggedMeal(
+  mealSize: MealSize,
+  selectedAt: Date,
+): LoggedMeal[] {
+  const meals = readLoggedMeals();
+  if (meals.length === 0) {
+    return addLoggedMeal(mealSize, selectedAt, new Date());
+  }
+
+  const latestMeal = getLatestLoggedMeal(meals);
+  const updated = meals.map((meal) =>
+    meal.selectedAt === latestMeal.selectedAt &&
+    meal.mealSize === latestMeal.mealSize
+      ? {
+          mealSize,
+          selectedAt: roundToNearest15Minutes(selectedAt).toISOString(),
+        }
+      : meal,
+  );
+  writeLoggedMeals(updated);
+  return updated;
 }

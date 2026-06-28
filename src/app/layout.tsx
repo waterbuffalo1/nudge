@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Montserrat } from "next/font/google";
+import { LiverStorageDisplay } from "@/components/LiverStorageDisplay";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -32,7 +33,10 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${montserrat.variable} min-h-full antialiased`}
     >
-      <body className="relative min-h-full flex flex-col">{children}</body>
+      <body className="relative min-h-full flex flex-col">
+        {children}
+        <LiverStorageDisplay />
+      </body>
     </html>
   );
 }
