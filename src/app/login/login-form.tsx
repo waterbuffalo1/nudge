@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
+import { DelayedLoadingOverlay } from "@/components/PageLoading";
 
 export function LoginForm() {
   const router = useRouter();
@@ -21,9 +22,9 @@ export function LoginForm() {
       body: JSON.stringify({ password }),
     });
     const data = await response.json();
-    setLoading(false);
 
     if (!response.ok) {
+      setLoading(false);
       setError(data.error ?? "Could not sign in.");
       return;
     }
@@ -34,7 +35,8 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-8 space-y-3">
+    <>
+      <form onSubmit={handleSubmit} className="mt-8 space-y-3">
       <label className="block text-sm font-medium text-muted">
         password
         <input
@@ -60,8 +62,10 @@ export function LoginForm() {
         disabled={loading || !password.trim()}
         className="w-full rounded-[2rem] border-2 border-border bg-elevated px-4 py-3 font-category text-lg font-medium text-foreground active:scale-[0.98] transition-transform disabled:opacity-50"
       >
-        {loading ? "checking…" : "continue"}
+        continue
       </button>
     </form>
+    <DelayedLoadingOverlay isLoading={loading} label="checking…" />
+    </>
   );
 }

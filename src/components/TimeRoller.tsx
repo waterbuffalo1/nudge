@@ -1,10 +1,25 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const ITEM_HEIGHT = 40;
 const VISIBLE_ROWS = 5;
 const PADDING_ROWS = Math.floor(VISIBLE_ROWS / 2);
+
+const rollerItemBaseClassName =
+  "font-category text-xl font-medium transition-colors duration-150";
+
+function getRollerItemColorClass(distance: number): string {
+  if (distance === 0) {
+    return "text-foreground";
+  }
+
+  if (distance === 1) {
+    return "text-muted/75";
+  }
+
+  return "text-done-soft";
+}
 
 type TimeRollerProps = {
   hour12: number;
@@ -31,6 +46,24 @@ function RollerColumn<T extends string | number>({
   const scrollRef = useRef<HTMLDivElement>(null);
   const scrollEndTimerRef = useRef<number | null>(null);
   const isProgrammaticScrollRef = useRef(false);
+  const [centerIndex, setCenterIndex] = useState(() => {
+    const index = options.indexOf(value);
+    return index >= 0 ? index : 0;
+  });
+
+  function getCenterIndex(container: HTMLDivElement): number {
+    const index = Math.round(container.scrollTop / ITEM_HEIGHT);
+    return Math.max(0, Math.min(options.length - 1, index));
+  }
+
+  function updateCenterIndex() {
+    const container = scrollRef.current;
+    if (!container) {
+      return;
+    }
+
+    setCenterIndex(getCenterIndex(container));
+  }
 
   useEffect(() => {
     const index = options.indexOf(value);
@@ -39,6 +72,7 @@ function RollerColumn<T extends string | number>({
       return;
     }
 
+    setCenterIndex(index);
     isProgrammaticScrollRef.current = true;
     container.scrollTop = index * ITEM_HEIGHT;
 
@@ -55,12 +89,12 @@ function RollerColumn<T extends string | number>({
       return;
     }
 
-    const index = Math.round(container.scrollTop / ITEM_HEIGHT);
-    const clamped = Math.max(0, Math.min(options.length - 1, index));
-    const nextValue = options[clamped];
+    const clamped = getCenterIndex(container);
+    const nextValue = options[clamped]!;
 
     isProgrammaticScrollRef.current = true;
     container.scrollTop = clamped * ITEM_HEIGHT;
+    setCenterIndex(clamped);
     requestAnimationFrame(() => {
       isProgrammaticScrollRef.current = false;
     });
@@ -71,8 +105,8 @@ function RollerColumn<T extends string | number>({
   }
 
   function handleScroll() {
-    if (isProgrammaticScrollRef.current) {
-      return;
+    if (!isProgrammaticScrollRef.current) {
+      updateCenterIndex();
     }
 
     if (scrollEndTimerRef.current !== null) {
@@ -104,10 +138,12 @@ function RollerColumn<T extends string | number>({
         {Array.from({ length: PADDING_ROWS }, (_, index) => (
           <div key={`pad-top-${index}`} style={{ height: ITEM_HEIGHT }} aria-hidden />
         ))}
-        {options.map((option) => (
+        {options.map((option, index) => (
           <div
             key={String(option)}
-            className="flex items-center justify-center font-category text-xl font-medium text-foreground"
+            className={`flex items-center justify-center ${rollerItemBaseClassName} ${getRollerItemColorClass(
+              Math.abs(index - centerIndex),
+            )}`}
             style={{
               height: ITEM_HEIGHT,
               scrollSnapAlign: "center",
@@ -163,6 +199,36 @@ export function TimeRoller({
           format={(value) => value}
         />
       </div>
+    </div>
+  );
+}
+
+type DayRollerProps = {
+  dayOffset: 0 | 1 | 2;
+  onDayOffsetChange: (dayOffset: 0 | 1 | 2) => void;
+};
+
+const DAY_OFFSETS = [2, 1, 0] as const;
+const DAY_LABELS: Record<(typeof DAY_OFFSETS)[number], string> = {
+  0: "today",
+  1: "yesterday",
+  2: "day before yesterday",
+};
+
+export function DayRoller({ dayOffset, onDayOffsetChange }: DayRollerProps) {
+  return (
+    <div className="relative mx-auto w-full max-w-xs">
+      <div
+        className="pointer-events-none absolute inset-x-0 top-1/2 z-10 -translate-y-1/2 border-y border-border"
+        style={{ height: ITEM_HEIGHT }}
+        aria-hidden
+      />
+      <RollerColumn
+        options={DAY_OFFSETS}
+        value={dayOffset}
+        onChange={onDayOffsetChange}
+        format={(value) => DAY_LABELS[value]}
+      />
     </div>
   );
 }

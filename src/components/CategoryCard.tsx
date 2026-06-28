@@ -1,5 +1,7 @@
-import Link from "next/link";
+"use client";
+
 import { CategoryStars } from "@/components/CategoryStars";
+import { NavLink } from "@/components/NavLink";
 import type { Category } from "@/lib/categories";
 import type { CategoryProgress } from "@/lib/category-progress";
 import type { EatHomeCardLine } from "@/lib/eat-meal";
@@ -16,7 +18,7 @@ export function CategoryCard({
   eatHomeLines,
 }: CategoryCardProps) {
   return (
-    <Link
+    <NavLink
       href={`/${category.slug}`}
       className="relative flex aspect-square flex-col rounded-[2.75rem] border-2 border-border bg-elevated p-3 text-center active:scale-[0.98] transition-transform"
     >
@@ -50,6 +52,6 @@ export function CategoryCard({
           ))}
         </div>
       ) : null}
-    </Link>
+    </NavLink>
   );
 }

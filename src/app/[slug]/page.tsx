@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CategoryActivities } from "@/components/CategoryActivities";
+import { CategoryPageBack } from "@/components/CategoryPageBack";
 import { EatScreen } from "@/components/EatScreen";
 import { getActivitiesForCategory } from "@/lib/activities";
 import { EAT_CATEGORY_SLUG, getCategoryBySlug } from "@/lib/categories";
@@ -28,12 +28,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
     >
       {!isEat ? (
         <>
-          <Link
-            href="/"
-            className="mb-8 text-sm font-medium text-muted active:text-foreground"
-          >
-            ← back
-          </Link>
+          <CategoryPageBack />
           <h1 className="mb-8 text-xl font-semibold text-foreground">
             {category.emoji} {category.name}
           </h1>

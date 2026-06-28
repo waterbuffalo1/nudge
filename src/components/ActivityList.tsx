@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Activity } from "@/lib/activities";
 import { ActivityCard } from "@/components/ActivityCard";
+import { DelayedLoadingOverlay } from "@/components/PageLoading";
 import { isActivityCompleted } from "@/lib/activity-completion";
 import { getClientTimeZone } from "@/lib/client-timezone";
 import {
@@ -138,23 +139,26 @@ export function ActivityList({ categorySlug, activities }: ActivityListProps) {
   );
 
   return (
-    <div className="flex flex-col gap-3">
-      {activities.map((activity) => (
-        <ActivityCard
-          key={activity.slug}
-          activity={activity}
-          isDone={
-            loaded &&
-            isActivityCompleted(
-              activity.slug,
-              categorySlug,
-              completedByCategory,
-            )
-          }
-          onComplete={() => handleComplete(activity.slug)}
-          onUndo={() => handleUndo(activity.slug)}
-        />
-      ))}
+    <div className="relative">
+      <div className="flex flex-col gap-3">
+        {activities.map((activity) => (
+          <ActivityCard
+            key={activity.slug}
+            activity={activity}
+            isDone={
+              loaded &&
+              isActivityCompleted(
+                activity.slug,
+                categorySlug,
+                completedByCategory,
+              )
+            }
+            onComplete={() => handleComplete(activity.slug)}
+            onUndo={() => handleUndo(activity.slug)}
+          />
+        ))}
+      </div>
+      <DelayedLoadingOverlay isLoading={!loaded} />
     </div>
   );
 }

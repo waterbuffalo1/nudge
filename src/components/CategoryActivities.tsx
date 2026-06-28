@@ -19,6 +19,8 @@ export function CategoryActivities({
   const [sheetOpen, setSheetOpen] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const params = new URLSearchParams({
       category: categorySlug,
@@ -28,11 +30,19 @@ export function CategoryActivities({
     fetch(`/api/activities?${params.toString()}`)
       .then((response) => response.json())
       .then((data: { activities?: Activity[] }) => {
+        if (cancelled) {
+          return;
+        }
+
         setCustomActivities(data.activities ?? []);
       })
       .catch((error) => {
         console.error("Failed to load custom activities", error);
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [categorySlug]);
 
   const activities = useMemo(

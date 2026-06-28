@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { PageLoading } from "@/components/PageLoading";
 import { LoginForm } from "./login-form";
 
 export default function LoginPage() {
@@ -11,9 +12,7 @@ export default function LoginPage() {
         This app is private. Enter the site password to continue.
       </p>
 
-      <Suspense
-        fallback={<p className="mt-8 text-sm text-muted">Loading…</p>}
-      >
+      <Suspense fallback={<PageLoading />}>
         <LoginForm />
       </Suspense>
     </main>
