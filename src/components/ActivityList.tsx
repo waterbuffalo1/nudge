@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Activity } from "@/lib/activities";
 import { ActivityCard } from "@/components/ActivityCard";
-import { DelayedLoadingOverlay } from "@/components/PageLoading";
+import { LoadingOverlay } from "@/components/PageLoading";
 import { isActivityCompleted } from "@/lib/activity-completion";
 import { getClientTimeZone } from "@/lib/client-timezone";
 import {
@@ -97,7 +97,7 @@ export function ActivityList({ categorySlug, activities }: ActivityListProps) {
       setCompletedSlugs((current) => new Set(current).add(activitySlug));
 
       try {
-        await fetch("/api/completions", {
+        const response = await fetch("/api/completions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -106,8 +106,16 @@ export function ActivityList({ categorySlug, activities }: ActivityListProps) {
             timezone: timeZone,
           }),
         });
+        if (!response.ok) {
+          throw new Error("Failed to save completion");
+        }
       } catch (error) {
         console.error("Failed to save completion", error);
+        setCompletedSlugs((current) => {
+          const next = new Set(current);
+          next.delete(activitySlug);
+          return next;
+        });
       }
     },
     [categorySlug, timeZone],
@@ -122,7 +130,7 @@ export function ActivityList({ categorySlug, activities }: ActivityListProps) {
       });
 
       try {
-        await fetch("/api/completions", {
+        const response = await fetch("/api/completions", {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -131,8 +139,12 @@ export function ActivityList({ categorySlug, activities }: ActivityListProps) {
             timezone: timeZone,
           }),
         });
+        if (!response.ok) {
+          throw new Error("Failed to remove completion");
+        }
       } catch (error) {
         console.error("Failed to remove completion", error);
+        setCompletedSlugs((current) => new Set(current).add(activitySlug));
       }
     },
     [categorySlug, timeZone],
@@ -158,7 +170,7 @@ export function ActivityList({ categorySlug, activities }: ActivityListProps) {
           />
         ))}
       </div>
-      <DelayedLoadingOverlay isLoading={!loaded} />
+      {!loaded && <LoadingOverlay />}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export const FONT_SCALE_STEPS = [0.85, 0.925, 1, 1.1, 1.2, 1.35] as const;
 const DEFAULT_FONT_SCALE_INDEX = 2;
@@ -29,13 +29,17 @@ function readStoredFontScaleIndex(): number {
 }
 
 export function useEatInfoFontScale() {
-  const [fontScaleIndex, setFontScaleIndex] = useState(DEFAULT_FONT_SCALE_INDEX);
+  const [fontScaleIndex, setFontScaleIndex] = useState(() =>
+    readStoredFontScaleIndex(),
+  );
+  const skipNextPersist = useRef(true);
 
   useEffect(() => {
-    setFontScaleIndex(readStoredFontScaleIndex());
-  }, []);
+    if (skipNextPersist.current) {
+      skipNextPersist.current = false;
+      return;
+    }
 
-  useEffect(() => {
     window.localStorage.setItem(
       EAT_INFO_FONT_SCALE_KEY,
       String(fontScaleIndex),

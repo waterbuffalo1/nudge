@@ -711,6 +711,20 @@ export function getLatestLoggedMeal(meals: LoggedMeal[]): LoggedMeal {
   );
 }
 
+export function findLatestLoggedMealIndex(meals: LoggedMeal[]): number {
+  let latestIndex = 0;
+
+  for (let index = 1; index < meals.length; index += 1) {
+    const current = new Date(meals[index]!.selectedAt);
+    const best = new Date(meals[latestIndex]!.selectedAt);
+    if (current >= best) {
+      latestIndex = index;
+    }
+  }
+
+  return latestIndex;
+}
+
 export function readLoggedMeals(): LoggedMeal[] {
   if (typeof window === "undefined") {
     return [];
@@ -803,10 +817,9 @@ export function updateLatestLoggedMeal(
     return addLoggedMeal(mealSize, selectedAt, now);
   }
 
-  const latestMeal = getLatestLoggedMeal(meals);
-  const updated = meals.map((meal) =>
-    meal.selectedAt === latestMeal.selectedAt &&
-    meal.mealSize === latestMeal.mealSize
+  const latestIndex = findLatestLoggedMealIndex(meals);
+  const updated = meals.map((meal, index) =>
+    index === latestIndex
       ? {
           mealSize,
           selectedAt: roundToNearest15Minutes(selectedAt).toISOString(),

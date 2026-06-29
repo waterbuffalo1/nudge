@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { DelayedLoadingOverlay } from "@/components/PageLoading";
+import { safeInternalPath } from "@/lib/safe-path";
 
 export function LoginForm() {
   const router = useRouter();
@@ -16,22 +17,32 @@ export function LoginForm() {
     setLoading(true);
     setError(null);
 
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
-    });
-    const data = await response.json();
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
 
-    if (!response.ok) {
+      let data: { error?: string } = {};
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+
+      if (!response.ok) {
+        setError(data.error ?? "Could not sign in.");
+        return;
+      }
+
+      router.replace(safeInternalPath(searchParams.get("from")));
+      router.refresh();
+    } catch {
+      setError("Could not sign in. Check your connection and try again.");
+    } finally {
       setLoading(false);
-      setError(data.error ?? "Could not sign in.");
-      return;
     }
-
-    const from = searchParams.get("from") || "/";
-    router.replace(from.startsWith("/login") ? "/" : from);
-    router.refresh();
   }
 
   return (

@@ -441,6 +441,7 @@ export function getLiverGramsForMoonDisplay(
     const start = roundToNearest15Minutes(new Date(meal.selectedAt));
     const fillEnd = addHours(start, getFillWindowHours(meal.mealSize)).getTime();
     if (now.getTime() < fillEnd) {
+      // One minute before fill completes: peak tank level for moon display.
       projectionMs = Math.max(projectionMs, fillEnd - 60_000);
     }
   }

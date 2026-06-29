@@ -3,6 +3,7 @@ import {
   addLoggedMeal,
   dateFromPickerValues,
   dateToPickerValues,
+  findLatestLoggedMealIndex,
   formatFriendlyTime,
   formatRelativeTime,
   formatRelativeTimeRange,
@@ -32,6 +33,7 @@ import {
   LIVER_CAP_GRAMS,
   LIVER_FLOOR_GRAMS,
   roundToNearest15Minutes,
+  updateLatestLoggedMeal,
   simulateMetabolicState,
 } from "./eat-meal";
 import { addHours, type LoggedMeal, type MealSize } from "./eat-meal-timing";
@@ -635,6 +637,77 @@ describe("eat meal windows", () => {
       meridiem: "pm",
       dayOffset: 1,
     });
+  });
+
+  it("anchors edit submit to when edit opened, not submit time", () => {
+    const editOpenedAt = new Date("2026-06-17T23:30:00-04:00");
+    const submitAt = new Date("2026-06-18T00:05:00-04:00");
+    const picker = dateToPickerValues(
+      new Date("2026-06-17T18:00:00-04:00"),
+      editOpenedAt,
+    );
+
+    const anchored = dateFromPickerValues({ ...picker, relativeTo: editOpenedAt });
+    const unanchored = dateFromPickerValues({ ...picker, relativeTo: submitAt });
+
+    expect(anchored).toEqual(new Date("2026-06-17T18:00:00-04:00"));
+    expect(unanchored).toEqual(new Date("2026-06-18T18:00:00-04:00"));
+  });
+
+  it("updates only the latest meal when duplicates share timestamp and size", () => {
+    const sharedAt = new Date("2026-06-17T12:00:00-04:00").toISOString();
+    const meals = [
+      { mealSize: "small snack" as const, selectedAt: sharedAt },
+      { mealSize: "small snack" as const, selectedAt: sharedAt },
+      {
+        mealSize: "feast" as const,
+        selectedAt: new Date("2026-06-17T08:00:00-04:00").toISOString(),
+      },
+    ];
+
+    expect(findLatestLoggedMealIndex(meals)).toBe(1);
+
+    const originalWindow = globalThis.window;
+    const storage = new Map<string, string>([
+      ["nudge-eat-meals", JSON.stringify(meals)],
+    ]);
+
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        localStorage: {
+          getItem: (key: string) => storage.get(key) ?? null,
+          setItem: (key: string, value: string) => {
+            storage.set(key, value);
+          },
+          removeItem: (key: string) => {
+            storage.delete(key);
+          },
+        },
+      },
+    });
+
+    try {
+      const newTime = new Date("2026-06-17T13:00:00-04:00");
+      const updated = updateLatestLoggedMeal("reasonable meal", newTime);
+
+      expect(updated).toHaveLength(3);
+      expect(updated[0]).toEqual(meals[0]);
+      expect(updated[1]?.mealSize).toBe("reasonable meal");
+      expect(updated[1]?.selectedAt).toBe(
+        roundToNearest15Minutes(newTime).toISOString(),
+      );
+      expect(updated[2]).toEqual(meals[2]);
+    } finally {
+      if (originalWindow) {
+        Object.defineProperty(globalThis, "window", {
+          configurable: true,
+          value: originalWindow,
+        });
+      } else {
+        Reflect.deleteProperty(globalThis, "window");
+      }
+    }
   });
 
   it("overlaps liver across meals and keeps latest digestion and pancreas", () => {

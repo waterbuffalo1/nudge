@@ -5,7 +5,7 @@ import { TimeRoller, DayRoller } from "@/components/TimeRoller";
 import { EatInfoFontScaleControl } from "@/components/EatInfoFontScaleControl";
 import { EatInfoScreen } from "@/components/EatInfoScreen";
 import { NavLink } from "@/components/NavLink";
-import { DelayedLoadingOverlay } from "@/components/PageLoading";
+import { LoadingOverlay } from "@/components/PageLoading";
 import { useEatInfoFontScale } from "@/lib/eat-info-font-scale";
 import { EAT_INFO_1_SECTIONS } from "@/lib/eat-info-content";
 import {
@@ -483,6 +483,7 @@ export function EatScreen() {
   const [editPicker, setEditPicker] = useState<MealTimePickerValues>(() =>
     dateToPickerValues(roundToNearest15Minutes(new Date())),
   );
+  const [editRelativeTo, setEditRelativeTo] = useState(() => new Date());
   const {
     fontScale,
     canDecrease,
@@ -574,7 +575,9 @@ export function EatScreen() {
   }
 
   function handleEditOpen() {
-    const defaults = getEditDefaults(meals, new Date());
+    const openedAt = new Date();
+    const defaults = getEditDefaults(meals, openedAt);
+    setEditRelativeTo(openedAt);
     setEditMealSize(defaults.mealSize);
     setEditPicker({
       hour12: defaults.hour12,
@@ -586,7 +589,10 @@ export function EatScreen() {
   }
 
   function handleEditSubmit() {
-    const selectedAt = dateFromPickerValues(editPicker);
+    const selectedAt = dateFromPickerValues({
+      ...editPicker,
+      relativeTo: editRelativeTo,
+    });
     const updated = updateLatestLoggedMeal(editMealSize, selectedAt);
     setMeals(updated);
     setNow(new Date());
@@ -637,7 +643,7 @@ export function EatScreen() {
   );
 
   if (!ready) {
-    return <DelayedLoadingOverlay isLoading />;
+    return <LoadingOverlay />;
   }
 
   if (step === "info") {

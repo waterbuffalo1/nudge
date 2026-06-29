@@ -64,9 +64,18 @@ export function NavLink({
       return;
     }
 
+    const hrefString = getHrefString(href);
+    if (
+      (props.target !== undefined && props.target !== "_self") ||
+      props.download !== undefined ||
+      /^https?:\/\//i.test(hrefString)
+    ) {
+      return;
+    }
+
     event.preventDefault();
     startTransition(() => {
-      router.push(getHrefString(href));
+      router.push(hrefString);
     });
   }
 

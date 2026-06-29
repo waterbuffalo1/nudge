@@ -74,7 +74,7 @@ export function DelayedLoadingOverlay({
 }
 
 export function PageLoading(props: PageLoadingProps) {
-  return <DelayedLoadingOverlay isLoading {...props} />;
+  return <LoadingOverlay {...props} />;
 }
 
 export function SectionLoading(
