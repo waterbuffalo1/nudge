@@ -18,7 +18,6 @@ import {
   getCombinedEatState,
   getLatestLoggedMeal,
   getMealWindows,
-  getMoonPhaseEmojiForLiverGrams,
   getMoonPhaseEmojiForMeals,
   isEatCycleActive,
   isMealCycleStarted,

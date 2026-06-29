@@ -533,51 +533,6 @@ export type MealStatusRow = {
   isDone: boolean;
 };
 
-export function getMealStatusRows(
-  windows: MealWindows,
-  now: Date,
-): MealStatusRow[] {
-  const currentPhase = getMealPhase(windows, now);
-
-  function row(
-    phase: MealPhase,
-    icon: string,
-    text: string,
-  ): MealStatusRow {
-    return {
-      icon,
-      text,
-      isDone: getPhaseRelation(phase, currentPhase) === "past",
-    };
-  }
-
-  return [
-    row("digestion", "🔨", getDigestionStatusText(windows, now, currentPhase)),
-    row(
-      "pancreas-ramp-down",
-      "🫁",
-      getPancreasRampDownStatusText(windows, now, currentPhase),
-    ),
-    row(
-      "eating-from-storage",
-      "🍯",
-      "will snack on liver glycogen (nom nom nom) after pancreas finishes...",
-    ),
-    row("autophagy", "♻️", "autophagy. let's clean those streets! 🧹..."),
-  ];
-}
-
-export function getCurrentMealStatusRow(
-  windows: MealWindows,
-  now: Date,
-): MealStatusRow {
-  const currentPhase = getMealPhase(windows, now);
-  const rows = getMealStatusRows(windows, now);
-  const index = MEAL_PHASE_ORDER.indexOf(currentPhase);
-
-  return rows[index] ?? rows[0]!;
-}
-
 export type EatHomeCardLine = {
   leadingIcon?: string;
   text: string;

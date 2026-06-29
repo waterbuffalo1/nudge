@@ -3,10 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CategoryCard } from "@/components/CategoryCard";
 import { getActivitiesForCategory } from "@/lib/activities";
-import { categories, EAT_CATEGORY_SLUG } from "@/lib/categories";
+import { categories, EAT_CATEGORY_SLUG, visibleCategories } from "@/lib/categories";
 import type { CategoryProgress } from "@/lib/category-progress";
 import { getClientTimeZone } from "@/lib/client-timezone";
-import { getEatHomeCardLines, type EatHomeCardLine } from "@/lib/eat-meal";
+import {
+  EAT_UPDATED_EVENT,
+  getEatHomeCardLines,
+  type EatHomeCardLine,
+} from "@/lib/eat-meal";
 
 function getBuiltInProgress(): Record<string, CategoryProgress> {
   return Object.fromEntries(
@@ -59,9 +63,11 @@ export function CategoryGrid() {
     };
 
     window.addEventListener("focus", handleFocus);
+    window.addEventListener(EAT_UPDATED_EVENT, refreshEatHomeLines);
     return () => {
       window.clearInterval(intervalId);
       window.removeEventListener("focus", handleFocus);
+      window.removeEventListener(EAT_UPDATED_EVENT, refreshEatHomeLines);
     };
   }, [loadProgress, refreshEatHomeLines]);
 
@@ -69,7 +75,7 @@ export function CategoryGrid() {
     const builtIn = getBuiltInProgress();
 
     return Object.fromEntries(
-      categories.map((category) => [
+      visibleCategories.map((category) => [
         category.slug,
         progressByCategory[category.slug] ?? builtIn[category.slug],
       ]),
@@ -78,7 +84,7 @@ export function CategoryGrid() {
 
   return (
     <div className="grid grid-cols-2 gap-3">
-      {categories.map((category) => (
+      {visibleCategories.map((category) => (
         <CategoryCard
           key={category.slug}
           category={category}

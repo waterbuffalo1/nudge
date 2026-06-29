@@ -12,7 +12,6 @@ import {
   getCombinedMealPhase,
   getCombinedMealStatusRows,
   getCumulativeFillGrams,
-  getCurrentMealStatusRow,
   getDigestionStatusText,
   getEatHomeCardLines,
   getFillWindowHours,
@@ -20,7 +19,6 @@ import {
   getLiverMoonFillPercent,
   getDrainableLiverGrams,
   getMealPhase,
-  getMealStatusRows,
   getMealWindows,
   getMoonPhaseEmojiForLiverGrams,
   getMoonPhaseEmojiForLiverPercent,
@@ -497,15 +495,6 @@ describe("eat meal windows", () => {
       `body processed food from 6${TIME_RANGE_HYPHEN}8pm.`,
     );
     expect(getPancreasRampDownStatusText(windows, duringPancreasRampDown)).toBe(
-      "pancreas is ramping down and we will approach our blood sugar baseline until 10pm tonight...",
-    );
-
-    const statusRows = getMealStatusRows(windows, duringPancreasRampDown);
-    expect(statusRows[0]?.isDone).toBe(true);
-    expect(statusRows[1]?.isDone).toBe(false);
-
-    const currentStatus = getCurrentMealStatusRow(windows, duringPancreasRampDown);
-    expect(currentStatus.text).toBe(
       "pancreas is ramping down and we will approach our blood sugar baseline until 10pm tonight...",
     );
   });
